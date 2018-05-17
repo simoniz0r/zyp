@@ -262,13 +262,6 @@ function zyphelp() {
                                 (default is 100)
     "
 }
-# check if user has logged into osc
-if [ ! -d "$HOME/.config/osc" ] || [ ! -f "$HOME/.config/osc/oscrc" ]; then
-    echo "Please run 'osc' and login before running 'zyp'"
-    echo "If you do not have an account, create one here:"
-    echo "https://secure-www.novell.com/selfreg/jsp/createOpenSuseAccount.jsp?%22"
-    exit 1
-fi
 # function to handle argument input
 function zypstart() {
     case "$1" in
@@ -313,15 +306,20 @@ function zypstart() {
             ;;
     esac
 }
-
+# prevent script from running as root unless argument passed
 if [ "$1" = "-S" ] || [ "$1" = "--skip-check" ]; then
     shift
-# elif [ "$ZYPALLOWROOT" = "TRUE" ]; then
-#     sleep 0
 elif [ $EUID -eq 0 ]; then
     echo "It is not recommended to run 'zyp' as root."
     echo "'zyp' will automatically escalate privileges when necessary."
     echo "Run 'zyp --skip-check' or 'zyp -S' to bypass this check."
+    exit 1
+fi
+# check if user has logged into osc
+if [ ! -d "$HOME/.config/osc" ] || [ ! -f "$HOME/.config/osc/oscrc" ]; then
+    echo "Please run 'osc' and login before running 'zyp'"
+    echo "If you do not have an account, create one here:"
+    echo "https://secure-www.novell.com/selfreg/jsp/createOpenSuseAccount.jsp?%22"
     exit 1
 fi
 

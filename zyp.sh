@@ -86,7 +86,7 @@ function searchstart() {
             for line in $SEARCH_RESULTS; do
                 NEW_LINE_LENGTH=$(echo $line | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev | wc -m)
                 NEW_DASH_LENGTH=$(echo $line | rev | cut -f3- -d'/' | cut -f2- -d'-' | rev | wc -m)
-                [ $NEW_LINE_LENGTH -gt $LINE_LENGTH ] && LINE_LENGTH=$(($NEW_LINE_LENGTH+2))
+                [ $NEW_LINE_LENGTH -gt $LINE_LENGTH ] && LINE_LENGTH=$(($NEW_LINE_LENGTH))
                 [ $NEW_DASH_LENGTH -gt $DASH_LENGTH ] && DASH_LENGTH=$(($NEW_DASH_LENGTH-1))
             done
             printf "%-${LINE_LENGTH}s %s\n" " Package" "| Repository"

@@ -61,13 +61,13 @@ function searchstart() {
             ;;
         # only send -s and package searches to osc; everything else goes to zypper and exits
         -s|[a-z]*|[A-Z]*|[0-9]*)
-            zypper se "$@"
+            $ZYPPER se "$@"
             local ZYPPER_EXIT=$?
             echo
             ;;
         *)
             [ "$1" = "-L" ] || [ "$1" = "--local" ] && shift
-            zypper se "$@"
+            $ZYPPER se "$@"
             exit 0
             ;;
     esac
@@ -122,7 +122,7 @@ function installstart() {
             shift
             ;;
         *)
-            sudo zypper in "$@" 
+            sudo $ZYPPER in "$@" 
             ZYPPER_EXIT=$?
             case $ZYPPER_EXIT in
                 # if zypper exits 104, package wasn't found, so search with osc
@@ -207,7 +207,7 @@ function addobsrepo() {
         installpackage "$SKIP_REPOREM" "$REPO_NAME" "$PACKAGE"
     else
         SKIP_REPOREM="FALSE"
-        sudo zypper ar -f -p $REPO_PRIORITY -n "$REPO_NAME/$REPO_RELEASE" ${REPO_URL}/${PROJECT_NAME}.repo
+        sudo $ZYPPER ar -f -p $REPO_PRIORITY -n "$REPO_NAME/$REPO_RELEASE" ${REPO_URL}/${PROJECT_NAME}.repo
         local ZYPPER_EXIT=$?
         case $ZYPPER_EXIT in
             0)
@@ -224,7 +224,7 @@ function installpackage() {
     local SKIP_REPOREM="$1"
     local REPO_NAME="$2"
     local PACKAGE="$3"
-    sudo zypper install "$PACKAGE"
+    sudo $ZYPPER install "$PACKAGE"
     local ZYPPER_EXIT=$?
     case $ZYPPER_EXIT in
         0|4|104)
@@ -243,7 +243,7 @@ function askremoverepo() {
     case "$ASKREMOVE_ANSWER" in
         N*|n*)
             unset ZYPPER_EXIT
-            sudo zypper rr "$REPO_NAME"
+            sudo $ZYPPER rr "$REPO_NAME"
             local ZYPPER_EXIT=$?
             exit $ZYPPER_EXIT
             ;;
@@ -278,24 +278,24 @@ function zypstart() {
             rm -f /tmp/zypsearch /tmp/zypresults
             ;;
         ps)
-            sudo zypper ps -s
+            sudo $ZYPPER ps -s
             ;;
         help|-h|--help)
-            zypper help
+            $ZYPPER help
             zyphelp
             ;;
         *)
             if [ -z "$1" ]; then
-                zypper help
+                $ZYPPER help
                 zyphelp
                 exit 0
             fi
-            zypper "$@" 2> /tmp/zyperrors
+            $ZYPPER "$@" 2> /tmp/zyperrors
             local ZYPPER_EXIT=$?
             case $ZYPPER_EXIT in
                 5)
                     rm -f /tmp/zyperrors
-                    sudo zypper "$@"
+                    sudo $ZYPPER "$@"
                     ;;
                 *)
                     cat /tmp/zyperrors
@@ -322,5 +322,14 @@ if [ ! -d "$HOME/.config/osc" ] || [ ! -f "$HOME/.config/osc/oscrc" ]; then
     echo "https://secure-www.novell.com/selfreg/jsp/createOpenSuseAccount.jsp?%22"
     exit 1
 fi
-
+# enable quiet mode
+case "$1" in
+    -q|--quiet)
+        shift
+        ZYPPER="zypper -q"
+        ;;
+    *)
+        ZYPPER="zypper"
+        ;;
+esac
 zypstart "$@" && exit 0

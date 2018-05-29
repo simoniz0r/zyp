@@ -123,11 +123,7 @@ function installstart() {
             shift
             ;;
         *)
-            if [ "$ZYPPER" = "zypper -q" ]; then
-                sudo zypper in "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*"
-            else
-                sudo $ZYPPER in "$@"
-            fi
+            sudo $ZYPPER in "$@"
             ZYPPER_EXIT=$?
             case $ZYPPER_EXIT in
                 # if zypper exits 104, package wasn't found, so search with osc
@@ -291,21 +287,10 @@ function zypstart() {
             $ZYPPER help
             zyphelp
             ;;
-        dup|dist-upgrade)
-            if [ "$ZYPPER" = "zypper -q" ]; then
-                sudo zypper "$@" | grep -v "Warning:.*You are about to do a distribution"
-                local ZYPPER_EXIT=$?
-                exit $ZYPPER_EXIT
-            else
-                sudo zypper "$@"
-                local ZYPPER_EXIT=$?
-                exit $ZYPPER_EXIT
-            fi
-            ;;
         if|info)
-            if [ "$ZYPPER" = "zypper -q" ] || [ "$ZYPPER" = "zypper --quiet" ]; then
+            if [ "$ZYPPER" = "zypper -q" ]; then
                 zypper "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*" \
-                | grep -vw "^.*Repository .* is out-of-date.*"
+                |grep -vw "^.*Repository .* is out-of-date.*"
             else
                 $ZYPPER "$@"
             fi
@@ -351,10 +336,6 @@ fi
 # enable quiet mode
 case "$1" in
     -q|--quiet)
-        shift
-        ZYPPER="zypper --quiet"
-        ;;
-    -nv|--no-verbose)
         shift
         ZYPPER="zypper -q"
         ;;

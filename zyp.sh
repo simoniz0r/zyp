@@ -16,10 +16,9 @@ function askquestion() {
     echo "$(tput smul)$QUESTION_TITLE$(tput rmul)"
     echo
     echo -e "$QUESTION_TEXT"
-    echo
     for option in $@; do
         [ $QUESTION_NUMBER -lt 10 ] && QUESTION_NUMBER=" $QUESTION_NUMBER"
-        echo "${QUESTION_NUMBER}. $(echo $option | tr '%' ' ')"
+        echo "${QUESTION_NUMBER} | $(echo $option | tr '%' ' ')"
         echo "$(echo $option | tr '%' ' ')" >> /tmp/questionoptions
         local QUESTION_NUMBER=$(($QUESTION_NUMBER+1))
     done
@@ -82,21 +81,23 @@ function searchstart() {
             ;;
         *)
             LINE_LENGTH=0
+            DASH_LENGTH=0
             # for loop to detect length of project name to set spacing
             for line in $SEARCH_RESULTS; do
-                NEW_LINE_LENGTH=$(echo $line | rev | cut -f4- -d'/' | rev | wc -m)
+                NEW_LINE_LENGTH=$(echo $line | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev | wc -m)
+                NEW_DASH_LENGTH=$(echo $line | rev | cut -f3- -d'/' | cut -f2- -d'-' | rev | wc -m)
                 [ $NEW_LINE_LENGTH -gt $LINE_LENGTH ] && LINE_LENGTH=$(($NEW_LINE_LENGTH+2))
+                [ $NEW_DASH_LENGTH -gt $DASH_LENGTH ] && DASH_LENGTH=$(($NEW_DASH_LENGTH-7))
             done
-            printf "%-11s %-${LINE_LENGTH}s %-20s %s\n" "Version" "Project" "Repo" "Package"
-            printf "%-11s %-${LINE_LENGTH}s %-20s %s\n" "-------" "-------" "----" "-------"
+            printf "%-${LINE_LENGTH}s %s\n" " Package" "| Repository"
+            printf "%-${LINE_LENGTH}s %-${DASH_LENGTH}s %s\n" "-------" "+ --------" " " | tr '[:blank:]' '-'
             # for loop that outputs results from osc in a sorted list
             for result in $SEARCH_RESULTS; do
-                printf "%-12s %-${LINE_LENGTH}s %-20s %s\n" "|$(echo $result | rev | cut -f1 -d'/' | cut -f2 -d'-' | rev | cut -c-10)" \
-                "$(echo $result | rev | cut -f4- -d'/' | rev)" \
-                "$(echo $result | rev | cut -f3 -d'/' | rev | cut -f2- -d'_')" "$(echo $result | rev | cut -f1 -d'/' | cut -f3- -d'-' | rev)" >> /tmp/zypresults
+                printf "%-${LINE_LENGTH}s %s\n" " $(echo $result | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev)" \
+                "| $(echo $result | rev | cut -f4- -d'/' | rev)/""$(echo $result | rev | cut -f3 -d'/' | rev | cut -f2- -d'_')" >> /tmp/zypresults
             done
-            echo "$(cat /tmp/zypresults | sort -fbdir -t\|)" > /tmp/zypresults
-            cat /tmp/zypresults | cut -f2 -d'|'
+            echo "$(cat /tmp/zypresults | sort -rV)" > /tmp/zypresults
+            cat /tmp/zypresults
             ;;
     esac
 }
@@ -147,24 +148,26 @@ function installstart() {
     if [ ! "$(cat /tmp/zypsearch)" = "null" ]; then
         local START_NUM=11
         local LINE_LENGTH=0
+        local DASH_LENGTH=0
         # for loop to detect length of project name to set spacing
         for line in $(cat /tmp/zypsearch); do
-            NEW_LINE_LENGTH=$(echo $line | rev | cut -f4- -d'/' | rev | wc -m)
+            NEW_LINE_LENGTH=$(echo $line | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev | wc -m)
+            NEW_DASH_LENGTH=$(echo $line | rev | cut -f3- -d'/' | cut -f2- -d'-' | rev | wc -m)
             [ $NEW_LINE_LENGTH -gt $LINE_LENGTH ] && LINE_LENGTH=$(($NEW_LINE_LENGTH+2))
+            [ $NEW_DASH_LENGTH -gt $DASH_LENGTH ] && DASH_LENGTH=$(($NEW_DASH_LENGTH-7))
         done
         # for loop that outputs results from osc in a sorted list to /tmp/zypresults
         for result in $(cat /tmp/zypsearch); do
-            printf "%-14s %-${LINE_LENGTH}s %-20s %s\n" "$START_NUM|$(echo $result | rev | cut -f1 -d'/' | cut -f2 -d'-' | rev | cut -c-10)" \
-            "$(echo $result | rev | cut -f4- -d'/' | rev)" \
-            "$(echo $result | rev | cut -f3 -d'/' | rev | cut -f2- -d'_')" "$(echo $result | rev | cut -f1 -d'/' | cut -f3- -d'-' | rev)" >> /tmp/zypresults
+            printf "%-${LINE_LENGTH}s %s\n" "$START_NUM|$(echo $result | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev)" \
+            "| $(echo $result | rev | cut -f4- -d'/' | rev)/""$(echo $result | rev | cut -f3 -d'/' | rev | cut -f2- -d'_')" >> /tmp/zypresults
             local START_NUM=$(($START_NUM+1))
         done
         # sort based on version number
-        echo "$(cat /tmp/zypresults | sort -fbdir -t\| -k2 | tr ' ' '%')" > /tmp/zypresults
+        echo "$(cat /tmp/zypresults | sort -rV -t\| -k2 | tr ' ' '%')" > /tmp/zypresults
         # ask which package user wants to install
-        askquestion "Select a package to install or press ENTER to exit:" "$(printf "%-14s %-${LINE_LENGTH}s %-20s %s\n" \
-        " Version" " Project" " Repo" " Package")\n$(printf "%-14s %-${LINE_LENGTH}s %-20s %s\n" " -------" " -------" " ----" " -------")" \
-        $(cat /tmp/zypresults | cut -f2 -d'|' | tr '\n' ' ')
+        askquestion "Select a package to install or press ENTER to exit:" "$(printf "%-${LINE_LENGTH}s %s\n" \
+        " # | Package" "  | Repository")\n$(printf "%-${LINE_LENGTH}s %-${DASH_LENGTH}s %s\n" " -------" "  + --------" " " | tr '[:blank:]' '-')" \
+        $(cat /tmp/zypresults | cut -f2- -d'|' | tr '\n' ' ')
         # get selected package based on number input from function above by using sed to select chosen row
         SELECTED_RESULT="$(sed "${SELECTED_OPTION}q;d" /tmp/zypresults | cut -f1 -d'|')"
         SELECTED_RESULT=$(($SELECTED_RESULT-10))

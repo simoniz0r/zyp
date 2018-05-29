@@ -36,7 +36,7 @@ function askquestion() {
     fi
 }
 
-# function to search for packages
+# function to search for packages in OBS repos
 function searchpackages() {
     # get distro version from /etc/os-release and only search for packages for that distro
     . /etc/os-release
@@ -51,7 +51,7 @@ function searchpackages() {
     esac
     [ ! -z "$SEARCH_RESULTS" ] && echo -e "$SEARCH_RESULTS" || echo "null"
 }
-# function that searches for packages
+# function that starts searching of packages and outputs results
 function searchstart() {
     case "$1" in
         # skip using repos in list
@@ -122,7 +122,11 @@ function installstart() {
             shift
             ;;
         *)
-            sudo $ZYPPER in "$@" 
+            if [ "$ZYPPER" = "zypper -q" ]; then
+                sudo zypper in "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*"
+            else
+                sudo $ZYPPER in "$@"
+            fi
             ZYPPER_EXIT=$?
             case $ZYPPER_EXIT in
                 # if zypper exits 104, package wasn't found, so search with osc
@@ -284,6 +288,25 @@ function zypstart() {
             $ZYPPER help
             zyphelp
             ;;
+        dup|dist-upgrade)
+            if [ "$ZYPPER" = "zypper -q" ]; then
+                sudo zypper "$@" | grep -v "Warning:.*You are about to do a distribution"
+                local ZYPPER_EXIT=$?
+                exit $ZYPPER_EXIT
+            else
+                sudo zypper "$@"
+                local ZYPPER_EXIT=$?
+                exit $ZYPPER_EXIT
+            fi
+            ;;
+        if|info)
+            if [ "$ZYPPER" = "zypper -q" ] || [ "$ZYPPER" = "zypper --quiet" ]; then
+                zypper "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*" \
+                | grep -vw "^.*Repository .* is out-of-date.*"
+            else
+                $ZYPPER "$@"
+            fi
+            ;;
         *)
             if [ -z "$1" ]; then
                 $ZYPPER help
@@ -326,15 +349,11 @@ fi
 case "$1" in
     -q|--quiet)
         shift
-        # work around 'info' argument not showing anything when quiet enabled
-        case "$1" in
-            info)
-                ZYPPER="zypper"
-                ;;
-            *)
-                ZYPPER="zypper -q"
-                ;;
-        esac
+        ZYPPER="zypper --quiet"
+        ;;
+    -nv|--no-verbose)
+        shift
+        ZYPPER="zypper -q"
         ;;
     *)
         ZYPPER="zypper"

@@ -326,7 +326,15 @@ fi
 case "$1" in
     -q|--quiet)
         shift
-        ZYPPER="zypper -q"
+        # work around 'info' argument not showing anything when quiet enabled
+        case "$1" in
+            info)
+                ZYPPER="zypper"
+                ;;
+            *)
+                ZYPPER="zypper -q"
+                ;;
+        esac
         ;;
     *)
         ZYPPER="zypper"

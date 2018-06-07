@@ -1,7 +1,7 @@
 #!/bin/bash
 # Author: simonizor
 # License: MIT
-# Dependencies: zypper, osc
+# Dependencies: zypper, osc, rsstail (optional, for mailing-list argument)
 # Description: A wrapper script for 'zypper' and 'osc' that adds install and search for openSUSE Build Sevice packages
 
 # Function to ask questions.  Automatically detects number of options inputted.
@@ -52,24 +52,25 @@ function searchpackages() {
 }
 # function that starts searching of packages and outputs results
 function searchstart() {
-    case "$1" in
-        # skip using repos in list
-        -O|--osc|--obs|--OBS)
-            shift
-            sleep 0
-            ;;
-        # only send -s and package searches to osc; everything else goes to zypper and exits
-        -s|[a-z]*|[A-Z]*|[0-9]*)
-            $ZYPPER se "$@"
-            local ZYPPER_EXIT=$?
-            echo
-            ;;
-        *)
-            [ "$1" = "-L" ] || [ "$1" = "--local" ] && shift
-            $ZYPPER se "$@"
-            exit 0
-            ;;
-    esac
+    if [ "$USE_OSC" = "TRUE" ]; then
+        sleep 0
+    elif [ "$USE_OSC" = "FALSE" ]; then
+        $ZYPPER se "$@"
+        exit 0
+    else
+        case "$1" in
+            # only send -s and package searches to osc; everything else goes to zypper and exits
+            -s|[a-z]*|[A-Z]*|[0-9]*)
+                $ZYPPER se "$@"
+                local ZYPPER_EXIT=$?
+                echo
+                ;;
+            *)
+                $ZYPPER se "$@"
+                exit 0
+                ;;
+        esac
+    fi
     echo "openSUSE Build Service results:"
     echo
     # run searchpackages function and set it as SEARCH_RESULTS variable
@@ -103,40 +104,23 @@ function searchstart() {
 }
 # function that displays a list of packages for install from OBS repos if none are available in repo list
 function installstart() {
-    case "$1" in
+    if [ "$USE_OSC" = "TRUE" ]; then
         # skip using repos in list
-        -O|--osc|--obs|--OBS)
-            shift
-            case "$1" in
-                -p|--priority)
-                    shift
-                    export REPO_PRIORITY=$1
-                    shift
-                    ;;
-            esac
-            sleep 0
-            ;;
-        # set priority for repo when adding
-        -p|--priority)
-            shift
-            export REPO_PRIORITY=$1
-            shift
-            ;;
-        *)
-            sudo $ZYPPER in "$@"
-            ZYPPER_EXIT=$?
-            case $ZYPPER_EXIT in
-                # if zypper exits 104, package wasn't found, so search with osc
-                104)
-                    echo "Package not found in repo list; searching with osc..."
-                    echo
-                    ;;
-                *)
-                    exit $ZYPPER_EXIT
-                    ;;
-            esac
-            ;;
-    esac
+        sleep 0
+    else
+        sudo $ZYPPER in "$@"
+        ZYPPER_EXIT=$?
+        case $ZYPPER_EXIT in
+            # if zypper exits 104, package wasn't found, so search with osc
+            104)
+                echo "Package not found in repo list; searching with osc..."
+                echo
+                ;;
+            *)
+                exit $ZYPPER_EXIT
+                ;;
+        esac
+    fi
     # set priority to 100 by default
     [ -z "$REPO_PRIORITY" ] && export REPO_PRIORITY=100
     # run searchpackages function and send results to /tmp/zypsearch
@@ -258,11 +242,21 @@ function askremoverepo() {
 # function to display zyp's help
 function zyphelp() {
     printf '%s\n' "
-     Subarguments provided by zyp:
+     Arguments provided by zyp:
+        changes, ch             Show changes for file for specified package(s).  Package(s) must be installed.
+        list-files, lf          List files provided by specified package(s).  Package(s) must be installed.
+        mailing-list, ml        Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
+                                Valid choices can be found here: https://lists.opensuse.org/
+                                'rsstail' must be installed to use this argument.
+
+     Subarguments provided by zyp for search/install:
          --obs, -O              Search for or install only packages from openSUSE Build Service repos.
+                                Ex: 'zyp search --obs package'
          --local, -L            Search for or install only packages from repos already in list.
+                                Ex: 'zyp search --local package'
          --priority, -P         Set the priority for the repository when installing packages from OBS repos.
                                 (default is 100)
+                                Ex: 'zyp install --priority 99 package'
     "
 }
 # function to handle argument input
@@ -271,12 +265,37 @@ function zypstart() {
         se|search)
             rm -f /tmp/zypsearch /tmp/zypresults
             shift
+            for arg in "$@"; do
+                case "$arg" in
+                    -O|--obs)
+                        shift
+                        USE_OSC="TRUE"
+                        ;;
+                    -L|--local)
+                        shift
+                        USE_OSC="FALSE"
+                        ;;
+                esac
+            done
             searchstart "$@"
             rm -f /tmp/zypsearch /tmp/zypresults
             ;;
         in|install)
             rm -f /tmp/zypsearch /tmp/zypresults
             shift
+            for arg in "$@"; do
+                case "$arg" in
+                    -O|--obs)
+                        shift
+                        USE_OSC="TRUE"
+                        ;;
+                    -P|--priority)
+                        shift
+                        REPO_PRIORITY=$1
+                        shift
+                        ;;
+                esac
+            done
             installstart "$@"
             rm -f /tmp/zypsearch /tmp/zypresults
             ;;
@@ -287,6 +306,7 @@ function zypstart() {
             $ZYPPER help
             zyphelp
             ;;
+        # replace info from 'zypper' with 'rpm -q --info' for much faster results
         if|info)
             if [ "$ZYPPER" = "zypper -q" ]; then
                 zypper "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*" \
@@ -294,6 +314,40 @@ function zypstart() {
             else
                 $ZYPPER "$@"
             fi
+            ;;
+        # extra commands provided by rpm
+        ch|changes)
+            shift
+            rpm -q --changes "$@"
+            ;;
+        lf|list-files)
+            shift
+            rpm -q --filesbypkg "$@"
+            ;;
+        # use rsstail to show messages from mailing list rss feed
+        ml|mailing-list)
+            if ! type rsstail > /dev/null 2>&1; then
+                echo "'rsstail' is not installed."
+                echo "To use the 'mailing-list' argument, please install 'rsstail' as shown below:"
+                echo "'zyp in rsstail'"
+                exit 1
+            fi
+            shift
+            if [ -z "$1" ]; then
+                MAILING_LIST="opensuse-factory"
+            else
+                MAILING_LIST="$1"
+            fi
+            shift
+            case "$MAILING_LIST" in
+                opensuse|*-*)
+                    LIST_URL="https://lists.opensuse.org/$MAILING_LIST/mailinglist.rss"
+                    ;;
+                *)
+                    LIST_URL="https://lists.opensuse.org/opensuse-$MAILING_LIST/mailinglist.rss"
+                    ;;
+            esac
+            rsstail -Hd1plu "$LIST_URL" "$@"
             ;;
         *)
             if [ -z "$1" ]; then
@@ -338,9 +392,16 @@ case "$1" in
     -q|--quiet)
         shift
         ZYPPER="zypper -q"
+        USE_RPM="FALSE"
+        ;;
+    -F|--fast)
+        shift
+        ZYPPER="zypper"
+        USE_RPM="TRUE"
         ;;
     *)
         ZYPPER="zypper"
+        USE_RPM="FALSE"
         ;;
 esac
 zypstart "$@" && exit 0

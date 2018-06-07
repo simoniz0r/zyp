@@ -243,7 +243,7 @@ function askremoverepo() {
 function zyphelp() {
     printf '%s\n' "
      Arguments provided by zyp:
-        changes, ch             Show changes for file for specified package(s).  Package(s) must be installed.
+        changes, ch             Show changes file for specified package(s).  Package(s) must be installed.
         list-files, lf          List files provided by specified package(s).  Package(s) must be installed.
         mailing-list, ml        Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
                                 Valid choices can be found here: https://lists.opensuse.org/

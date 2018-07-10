@@ -308,8 +308,8 @@ function zypstart() {
             ;;
         # replace info from 'zypper' with 'rpm -q --info' for much faster results
         if|info)
-            if [ "$ZYPPER" = "zypper -q" ]; then
-                zypper "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*" \
+            if [ "$ZYPPER" = "zypper --no-refresh -q" ]; then
+                zypper --no-refresh "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*" \
                 |grep -vw "^.*Repository .* is out-of-date.*"
             else
                 $ZYPPER "$@"
@@ -391,13 +391,8 @@ fi
 case "$1" in
     -q|--quiet)
         shift
-        ZYPPER="zypper -q"
+        ZYPPER="zypper --no-refresh -q"
         USE_RPM="FALSE"
-        ;;
-    -F|--fast)
-        shift
-        ZYPPER="zypper"
-        USE_RPM="TRUE"
         ;;
     *)
         ZYPPER="zypper"

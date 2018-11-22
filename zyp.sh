@@ -448,9 +448,10 @@ case "$1" in
                     # if zypper exits 104, package wasn't found, so search with osc
                     104)
                         echo -e "\nPackage not found in repo list; searching with openSUSE Build Service...\n"
-                        shift 2
+                        shift
                         MATCH_TEXT="TRUE"
-                        searchobs "--NOPRETTY" "$@"
+                        PACKAGE="$1"
+                        searchobs "--NOPRETTY" "$PACKAGE"
                         installobs
                         ;;
                     *)

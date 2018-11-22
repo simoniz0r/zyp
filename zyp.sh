@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 # Author: simonizor
 # License: MIT
 # Dependencies: zypper, curl, xmlstarlet

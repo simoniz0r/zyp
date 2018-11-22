@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 # Author: simonizor
 # License: MIT
 # Dependencies: zypper, curl, xmlstarlet
@@ -300,7 +300,7 @@ installobs() {
     case "$ASKINSTALL_ANSWER" in
         N|n|No|no) echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"; exit 0;;
     esac
-    REPO_URL="https://download.opensuse.org/repositories/$(echo "$PKG_PROJECT" | sed 's%:%:\/%g')/$(echo "$PKG_REPO" | sed 's%:%:\/%g')/"
+    REPO_URL="http://download.opensuse.org/repositories/$(echo "$PKG_PROJECT" | sed 's%:%:\/%g')/$(echo "$PKG_REPO" | sed 's%:%:\/%g')/"
     FULL_REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/$PKG_PROJECT.repo"
     REPO_NAME="$(echo $PKG_PROJECT | tr ':' '_')"
     # detect if user already has repo added

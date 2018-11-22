@@ -300,14 +300,13 @@ installobs() {
     case "$ASKINSTALL_ANSWER" in
         N|n|No|no) echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"; exit 0;;
     esac
-    REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/"
+    REPO_URL="https://download.opensuse.org/repositories/$(echo "$PKG_PROJECT" | sed 's%:%:\/%g')/$(echo "$PKG_REPO" | sed 's%:%:\/%g')/"
     FULL_REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/$PKG_PROJECT.repo"
     REPO_NAME="$(echo $PKG_PROJECT | tr ':' '_')"
     # detect if user already has repo added
-    if zypper lr -U | grep -qm1 "$REPO_URL"; then
+    if zypper -x lr | xmlstarlet sel -t -v "/stream/repo-list/repo/url" -n | grep -qm1 "$REPO_URL"; then
         echo "$(tput setaf $COLOR_STATUS)$REPO_URL is already in the list of repositories.$(tput sgr0)"
         SKIP_REPOREM="TRUE"
-        
     # else add repo
     else
         SKIP_REPOREM="FALSE"
@@ -355,21 +354,22 @@ mailinglist() {
 }
 # zyp help output
 zyphelp() {
-    printf '%s\n' "
-     Arguments provided by zyp:
-        changes, ch             Show changes file for specified package(s).  Package(s) must be installed.
-        list-files, lf          List files provided by specified package(s).  Package(s) must be installed.
-        local-install, lin      Install a package using only repositories in zypper's list.
-        local-search, lse       Run a search using only repositories in zypper's list.
-        mailing-list, ml        Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
-                                Valid choices can be found here: https://lists.opensuse.org/
-                                'rsstail' must be installed to use this argument.
-        obs-install, oin        Skip trying to use zypper to install a package and install from OBS repos.
-        obs-search, ose         Skip searching with zypper and search for packages in OBS repos.
-        orphaned, or            Lists installed packages which no longer have a repository associated with them.
-                                '--list or -l' may be used to list only the package names.
-                                '--remove or -r' may be used to remove all orphaned packages (USE WITH CAUTION).
-    "
+printf '%s\n' "
+  Arguments provided by zyp:
+
+       changes, ch          Show changes file for specified package(s).  Package(s) must be installed.
+       list-files, lf       List files provided by specified package(s).  Package(s) must be installed.
+       local-install, lin   Install a package using only repositories in zypper's list.
+       local-search, lse    Run a search using only repositories in zypper's list.
+       mailing-list, ml     Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
+                            Valid choices can be found here: https://lists.opensuse.org/
+                            'rsstail' must be installed to use this argument.
+       obs-install, oin     Skip trying to use zypper to install a package and install from OBS repos.
+       obs-search, ose      Skip searching with zypper and search for packages in OBS repos.
+       orphaned, or         Lists installed packages which no longer have a repository associated with them.
+                            '--list or -l' may be used to list only the package names.
+                            '--remove or -r' may be used to remove all orphaned packages (USE WITH CAUTION).
+"
 }
 
 # case to detect arguments

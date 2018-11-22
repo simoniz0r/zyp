@@ -1,402 +1,574 @@
 #!/bin/bash
 # Author: simonizor
 # License: MIT
-# Dependencies: zypper, osc, rsstail (optional, for mailing-list argument)
-# Description: A wrapper script for 'zypper' and 'osc' that adds install and search for openSUSE Build Sevice packages
+# Dependencies: zypper, curl, xmlstarlet
+# Description: A wrapper for 'zypper' that allows for easily
+# installing packages from OBS repos and adds other functionality.
 
-# Function to ask questions.  Automatically detects number of options inputted.
-# Detects if user inputs valid option and passes text of selected option on as SELECTED_OPTION variable
-# Exits if invalid selection is made
-function askquestion() {
-    local QUESTION_TITLE="$1" 
-    local QUESTION_TEXT="$2"
-    shift 2
-    local NUM_OPTIONS=$#
-    local QUESTION_NUMBER=1
-    echo "$(tput smul)$QUESTION_TITLE$(tput rmul)"
-    echo
-    echo -e "$QUESTION_TEXT"
-    for option in $@; do
-        [ $QUESTION_NUMBER -lt 10 ] && QUESTION_NUMBER=" $QUESTION_NUMBER"
-        echo "${QUESTION_NUMBER} | $(echo $option | tr '%' ' ')"
-        echo "$(echo $option | tr '%' ' ')" >> /tmp/questionoptions
-        local QUESTION_NUMBER=$(($QUESTION_NUMBER+1))
+# exit if ran as root
+if [[ $EUID -eq 0 ]]; then
+    echo "Do not run 'zyp' as root!"
+    exit 1
+fi
+# check if zyp cache dir exists
+if [[ ! -d "$HOME/.cache/zyp" ]]; then
+    mkdir -p "$HOME"/.cache/zyp
+fi
+# check if zyp config dir exists
+if [[ ! -d "$HOME/.config/zyp" ]]; then
+    # create config dir, config file, and then exit
+    mkdir -p "$HOME"/.config/zyp
+    echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp/zyp.conf
+    echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
+    echo "If you do not have a username and password, sign up for one here:"
+    echo "https://build.opensuse.org/session/new"
+    exit 1
+fi
+# make sure config file exists
+if [[ ! -f "$HOME/.config/zyp/zyp.conf" ]]; then
+    echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp
+    echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
+    echo "If you do not have a username and password, sign up for one here:"
+    echo "https://build.opensuse.org/session/new"
+    exit 1
+fi
+# source config file and check variables
+source "$HOME"/.config/zyp/zyp.conf
+if [[ -z "$OBS_USERNAME" ]] || [[ -z "$OBS_PASSWORD" ]]; then
+    echo "Missing openSUSE Build Service username and/or password in '$HOME/.config/zyp/zyp.conf'."
+    echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
+    echo "If you do not have a username and password, sign up for one here:"
+    echo "https://build.opensuse.org/session/new"
+    exit 1
+fi
+# detect which version of openSUSE we're running
+OPENSUSE_VERSION=$(rpm --eval "%{?suse_version}")
+if [[ $OPENSUSE_VERSION -ge 1550 ]]; then
+    OPENSUSE_VERSION="openSUSE_Tumbleweed\|openSUSE_Factory"
+else
+    OPENSUSE_VERSION="openSUSE_Leap_$(echo $OPENSUSE_VERSION | cut -c-2)"
+fi
+# get colors from zypper.conf
+colorparse() {
+    case "$1" in
+        red) echo "1";;
+        green) echo "2";;
+        blue) echo "4";;
+        brown) echo "3";;
+        cyan) echo "14";;
+        purple|magenta) echo "5";;
+        black) echo "0";;
+        yellow) echo "11";;
+        *) echo "7";;
+    esac
+}
+if [[ -f "/etc/zypp/zypper.conf" ]]; then
+    USE_COLORS="$(cat /etc/zypp/zypper.conf | grep 'useColors' | cut -f3 -d' ')"
+    if [[ "$USE_COLORS" != "never" ]]; then
+        COLOR_STATUS="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgStatus' | cut -f3 -d' '))"
+        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgError' | cut -f3 -d' '))"
+        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgWarning' | cut -f3 -d' '))"
+        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'positive =' | cut -f3 -d' '))"
+        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'negative =' | cut -f3 -d' '))"
+    else
+        COLOR_STATUS="7"
+        COLOR_ERROR="7"
+        COLOR_WARNING="7"
+        COLOR_POSITIVE="7"
+        COLOR_NEGATIVE="7"
+    fi
+else
+    COLOR_STATUS="2"
+    COLOR_ERROR="1"
+    COLOR_WARNING="3"
+    COLOR_POSITIVE="4"
+    COLOR_NEGATIVE="1"
+fi
+
+# function to output zypper's search results in a cleaner manner
+zyppersearch() {
+    zypper --no-refresh -x se "$@" | xmlstarlet sel -t -m "/stream/search-result/solvable-list/solvable" -v "concat(@name,'|',@status,'|',@kind,'|',@summary)" -n | tr ' ' '#' > "$HOME"/.cache/zyp/zypsearch.txt
+    if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -eq 0 ]]; then
+        echo "No matching items found."
+        ZYPPER_EXIT=104
+    else
+        for result in $(cat "$HOME"/.cache/zyp/zypsearch.txt); do
+            echo "$(tput setaf $COLOR_STATUS)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
+            echo "Status:  "$(echo "$result" | cut -f2 -d'|')""
+            echo "Type:    "$(echo "$result" | cut -f3 -d'|')""
+            echo "Summary: "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')""
+        done > "$HOME"/.cache/zyp/zypresults.txt
+        cat "$HOME"/.cache/zyp/zypresults.txt
+        rm -f "$HOME"/.cache/zyp/zypresults.txt
+        ZYPPER_EXIT=0
+    fi
+    rm -f "$HOME"/.cache/zyp/zypsearch.txt
+}
+# function to search for packages using the openSUSE Build Service API
+searchobs() {
+    case "$1" in
+        --NOPRETTY) shift; local PRETTY_PRINT="FALSE";;
+        *) local PRETTY_PRINT="TRUE";;
+    esac
+    if [[ "$MATCH_TEXT" == "TRUE" ]]; then
+        curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/search/published/binary/id?match=%40name%3D%27$1%27" > "$HOME"/.cache/zyp/zypsearch.xml
+        xmlstarlet sel -t -m "/collection/binary[@name='$1']" -v "concat(@name,'|',@version,'|',@project,'|',@repository,'|',@arch,'-arch','|',@package,'|',@filename)" -n "$HOME"/.cache/zyp/zypsearch.xml \
+        | grep -v 'src-arch' | grep "$OPENSUSE_VERSION" | grep "noarch\|$(uname -m)" > "$HOME"/.cache/zyp/zypsearch.txt
+    else
+        curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/search/published/binary/id?match=contains%28%40name%2C+%27$1%27%29" > "$HOME"/.cache/zyp/zypsearch.xml
+        xmlstarlet sel -t -m "/collection/binary" -v "concat(@name,'|',@version,'|',@project,'|',@repository,'|',@arch,'-arch')" -n "$HOME"/.cache/zyp/zypsearch.xml \
+        | grep -v 'src-arch' | grep "$OPENSUSE_VERSION" | grep "noarch\|$(uname -m)" > "$HOME"/.cache/zyp/zypsearch.txt
+    fi
+    rm -f "$HOME"/.cache/zyp/zypsearch.xml
+    if [[ "$PRETTY_PRINT" == "TRUE" ]]; then
+        if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -eq 0 ]]; then
+            echo "No matching items found."
+            rm -f "$HOME"/.cache/zyp/zypsearch.txt
+            exit 104
+        fi
+        for result in $(cat "$HOME"/.cache/zyp/zypsearch.txt); do
+            if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -lt 6 ]]; then
+                META_DESC="$(curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/published/$(echo "$result" | cut -f3 -d'|')/$(echo "$result" | cut -f4 -d'|')/$(echo "$result" | cut -f5 -d'|' | cut -f1 -d'-')/$(echo "$result" | cut -f1 -d'|')?view=ymp" | head -n -1 | tail -n +2 | xmlstarlet sel -t -v "/group/software/item/description" -n | tr '\n' ' ' | tr -d '*')"
+            fi
+            echo "$(tput setaf $COLOR_STATUS)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
+            echo "Version: "$(echo "$result" | cut -f2 -d'|')""
+            echo "Project: "$(echo "$result" | cut -f3 -d'|')""
+            echo "Repo:    "$(echo "$result" | cut -f4 -d'|')""
+            if [[ ! -z "$META_DESC" ]]; then
+                if [[ $(echo "$META_DESC" | wc -m) -lt 101 ]]; then
+                    echo "Summary: $META_DESC"
+                else
+                    echo "Summary: "$(echo "$META_DESC" | cut -c-100)"..."
+                fi
+            fi
+        done > "$HOME"/.cache/zyp/zypresults.txt
+        cat "$HOME"/.cache/zyp/zypresults.txt
+        rm -f "$HOME"/.cache/zyp/zypresults.txt
+    fi
+}
+# function to get info about OBS packages
+infoobs() {
+    # if no results, exit
+    if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -eq 0 ]]; then
+        echo "Package '$PACKAGE' not found."
+        exit 0
+    fi
+    # get the first result from searchobs
+    local RESULT="$(cat "$HOME"/.cache/zyp/zypsearch.txt | head -n 1)"
+    # get package info from OBS API
+    curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/build/$(echo "$RESULT" | cut -f3 -d'|')/$(echo "$RESULT" | cut -f4 -d'|')/$(uname -m)/$(echo "$RESULT" | cut -f6 -d'|')/$(echo "$RESULT" | cut -f7 -d'|')?view=fileinfo" > "$HOME"/.cache/zyp/fileinfo.xml
+    TEXT="Information-for-package-$(echo "$RESULT" | cut -f1 -d'|')"
+    echo "Information for package $(echo "$RESULT" | cut -f1 -d'|')"
+    # echo as many dashes as letters in above output text
+    for word in $(echo "$TEXT" | sed -e 's/\(.\)/\1\n/g'); do
+        echo -n "-"
     done
     echo
-    read -p "Option number: " -r QUESTION_SELECTION
-    [ -z "$QUESTION_SELECTION" ] && exit 0
-    if echo "$QUESTION_SELECTION" | grep -q '^[0-9]' && [ $QUESTION_SELECTION -gt 0 ] && [ $QUESTION_SELECTION -le $NUM_OPTIONS ]; then
-        export SELECTED_OPTION="$QUESTION_SELECTION"
-        rm -f /tmp/questionoptions
-        echo
-    else
-        rm -f /tmp/questionoptions
-        exit 0
+    # output info about package
+    echo "Repository   $(tput setaf $COLOR_STATUS):$(tput sgr0) $(echo "$RESULT" | cut -f4 -d'|')"
+    echo "Name         $(tput setaf $COLOR_STATUS):$(tput sgr0) $(echo "$RESULT" | cut -f1 -d'|')"
+    echo "Version      $(tput setaf $COLOR_STATUS):$(tput sgr0) $(echo "$RESULT" | cut -f2 -d'|')-$(xmlstarlet sel -t -v "/fileinfo/release" "$HOME"/.cache/zyp/fileinfo.xml)"
+    echo "Vendor       $(tput setaf $COLOR_STATUS):$(tput sgr0) obs://build.opensuse.org/$(echo "$RESULT" | cut -f3 -d'|')"
+    echo "Package Size $(tput setaf $COLOR_STATUS):$(tput sgr0) $(awk "BEGIN {print $(xmlstarlet sel -t -v "/fileinfo/size" "$HOME"/.cache/zyp/fileinfo.xml)/1024/1024}" | cut -c-5) MiB"
+    echo "Installed    $(tput setaf $COLOR_STATUS):$(tput sgr0) No"
+    echo "Status       $(tput setaf $COLOR_STATUS):$(tput sgr0) not installed"
+    echo "Summary      $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/summary" "$HOME"/.cache/zyp/fileinfo.xml)"
+    echo "Description  $(tput setaf $COLOR_STATUS):$(tput sgr0)"
+    echo "    $(tput setaf $COLOR_STATUS)$(xmlstarlet sel -t -v "/fileinfo/description" "$HOME"/.cache/zyp/fileinfo.xml)$(tput sgr0)"
+    # if --provides was used, output provides
+    if [[ "$PROVIDES" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Provides     $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for prov in $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$prov$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Provides     $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
     fi
-}
-
-# function to search for packages in OBS repos
-function searchpackages() {
-    # get distro version from /etc/os-release and only search for packages for that distro
-    . /etc/os-release
-    local DISTRO="$(echo $NAME | cut -f2 -d' ')"
-    case "$DISTRO" in
-        *Tumbleweed*|*tumbleweed*)
-            local SEARCH_RESULTS="$(osc bse --csv "$@" | tr '|' '\n' | grep "$(uname -m).rpm\|noarch.rpm" | grep -i "$DISTRO\|Factory")"
-            ;;
-        *)
-            local SEARCH_RESULTS="$(osc bse --csv "$@" | tr '|' '\n' | grep "$(uname -m).rpm\|noarch.rpm" | grep -i "$DISTRO")"
-            ;;
-    esac
-    [ ! -z "$SEARCH_RESULTS" ] && echo -e "$SEARCH_RESULTS" || echo "null"
-}
-# function that starts searching of packages and outputs results
-function searchstart() {
-    if [ "$USE_OSC" = "TRUE" ]; then
-        sleep 0
-    elif [ "$USE_OSC" = "FALSE" ]; then
-        $ZYPPER se "$@"
-        exit 0
-    else
-        case "$1" in
-            # only send -s and package searches to osc; everything else goes to zypper and exits
-            -s|[a-z]*|[A-Z]*|[0-9]*)
-                $ZYPPER se "$@"
-                local ZYPPER_EXIT=$?
-                echo
-                ;;
-            *)
-                $ZYPPER se "$@"
-                exit 0
-                ;;
-        esac
+    # if --requires was used, output requires
+    if [[ "$REQUIRES" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Requires    $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for req in $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$req$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Requires     $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
     fi
-    echo "openSUSE Build Service results:"
+    # if --conflicts was used, output conflicts
+    if [[ "$CONFLICTS" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Conflicts    $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for conf in $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$conf$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Conflicts    $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
+    fi
+    # of --obsoletes was used, output obsoletes
+    if [[ "$OBSOLETES" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Obsoletes    $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for obso in $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$obso$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Obsoletes    $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
+    fi
+    # if --recommends was used, output recommends
+    if [[ "$RECOMMENDS" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Recommends   $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for rec in $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$rec$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Recommends   $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
+    fi
+    # if --suggests was used, output suggests
+    if [[ "$SUGGESTS" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Suggests     $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for sugg in $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$sugg$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Suggests     $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
+    fi
+    # if --supplements was used, output supplements
+    if [[ "$SUPPLEMENTS" == "TRUE" ]]; then
+        if [[ $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
+            echo "Supplements  $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            for supp in $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
+                echo "    $(tput setaf $COLOR_STATUS)$supp$(tput sgr0)" | tr '#' ' '
+            done
+        else
+            echo "Supplements   $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml)"
+        fi
+    fi
     echo
-    # run searchpackages function and set it as SEARCH_RESULTS variable
-    local SEARCH_RESULTS="$(searchpackages "$@")"
-    case "$SEARCH_RESULTS" in
-        null)
-            echo "No matching items found."
-            exit $ZYPPER_EXIT
-            ;;
-        *)
-            LINE_LENGTH=0
-            DASH_LENGTH=0
-            # for loop to detect length of project name to set spacing
-            for line in $SEARCH_RESULTS; do
-                NEW_LINE_LENGTH=$(echo $line | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev | wc -m)
-                NEW_DASH_LENGTH=$(echo $line | rev | cut -f3- -d'/' | cut -f2- -d'-' | rev | wc -m)
-                [ $NEW_LINE_LENGTH -gt $LINE_LENGTH ] && LINE_LENGTH=$(($NEW_LINE_LENGTH))
-                [ $NEW_DASH_LENGTH -gt $DASH_LENGTH ] && DASH_LENGTH=$(($NEW_DASH_LENGTH-1))
-            done
-            printf "%-${LINE_LENGTH}s %s\n" " Package" "| Repository"
-            printf "%-${LINE_LENGTH}s %-${DASH_LENGTH}s %s\n" "-------" "+ --------" " " | tr '[:blank:]' '-'
-            # for loop that outputs results from osc in a sorted list
-            for result in $SEARCH_RESULTS; do
-                printf "%-${LINE_LENGTH}s %s\n" " $(echo $result | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev)" \
-                "| $(echo $result | rev | cut -f3- -d'/' | rev)" >> /tmp/zypresults
-            done
-            echo "$(cat /tmp/zypresults | sort -rV)" > /tmp/zypresults
-            cat /tmp/zypresults
-            ;;
-    esac
 }
-# function that displays a list of packages for install from OBS repos if none are available in repo list
-function installstart() {
-    if [ "$USE_OSC" = "TRUE" ]; then
-        # skip using repos in list
-        sleep 0
-    else
-        sudo $ZYPPER in "$@"
-        ZYPPER_EXIT=$?
-        case $ZYPPER_EXIT in
-            # if zypper exits 104, package wasn't found, so search with osc
-            104)
-                echo "Package not found in repo list; searching with osc..."
-                echo
-                ;;
-            *)
-                exit $ZYPPER_EXIT
-                ;;
-        esac
-    fi
-    # set priority to 100 by default
-    [ -z "$REPO_PRIORITY" ] && export REPO_PRIORITY=100
-    # run searchpackages function and send results to /tmp/zypsearch
-    searchpackages "$@" > /tmp/zypsearch 2>&1
-    if [ ! "$(cat /tmp/zypsearch)" = "null" ]; then
-        local START_NUM=11
-        local LINE_LENGTH=0
-        local DASH_LENGTH=0
-        # for loop to detect length of project name to set spacing
-        for line in $(cat /tmp/zypsearch); do
-            NEW_LINE_LENGTH=$(echo $line | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev | wc -m)
-            NEW_DASH_LENGTH=$(echo $line | rev | cut -f3- -d'/' | cut -f2- -d'-' | rev | wc -m)
-            [ $NEW_LINE_LENGTH -gt $LINE_LENGTH ] && LINE_LENGTH=$(($NEW_LINE_LENGTH+2))
-            [ $NEW_DASH_LENGTH -gt $DASH_LENGTH ] && DASH_LENGTH=$(($NEW_DASH_LENGTH+1))
-        done
-        # for loop that outputs results from osc in a sorted list to /tmp/zypresults
-        for result in $(cat /tmp/zypsearch); do
-            printf "%-${LINE_LENGTH}s %s\n" "$START_NUM|$(echo $result | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev)" \
-            "| $(echo $result | rev | cut -f3- -d'/' | rev)" >> /tmp/zypresults
-            local START_NUM=$(($START_NUM+1))
-        done
-        # sort based on version number
-        echo "$(cat /tmp/zypresults | sort -rV -t\| -k2 | tr ' ' '%')" > /tmp/zypresults
-        # ask which package user wants to install
-        askquestion "Select a package to install or press ENTER to exit:" "$(printf "%-${LINE_LENGTH}s %s\n" \
-        " # | Package" "  | Repository")\n$(printf "%-${LINE_LENGTH}s %-${DASH_LENGTH}s %s\n" " --+----" "  + --------" " " | tr '[:blank:]' '-')" \
-        $(cat /tmp/zypresults | cut -f2- -d'|' | tr '\n' ' ')
-        # get selected package based on number input from function above by using sed to select chosen row
-        SELECTED_RESULT="$(sed "${SELECTED_OPTION}q;d" /tmp/zypresults | cut -f1 -d'|')"
-        SELECTED_RESULT=$(($SELECTED_RESULT-10))
-        SELECTED_PACKAGE="$(sed "${SELECTED_RESULT}q;d" /tmp/zypsearch)"
-        [ -z "$SELECTED_PACKAGE" ] && exit 0
-        # output description of package from osc ymp data
-        echo "Selection:"
-        echo -e "$SELECTED_PACKAGE\n"
-        echo "Description:"
-        local API_PACKAGE="$(echo $SELECTED_PACKAGE | sed 's%:/%:%g')"
-        echo -e "$(osc api /published/$API_PACKAGE?view=ymp | tac | awk '/<\/metapackage/,/<\/repositories>/' | awk '/<\/description>/,/<description>/' | cut -f2 -d'>' | cut -f1 -d'<' | tac)\n"
-        # ask if package should be installed and run addobsrepo function if anything other than no chosen
-        read -p "$(tput bold)Add repository and install package? [y/n] (y):$(tput sgr0) " INSTALL_ANSWER
-        echo
-        case $INSTALL_ANSWER in
-            N*|n*)
-                exit 0
-                ;;
-            *)
-                addobsrepo "$SELECTED_PACKAGE"
-                ;;
-        esac
-    else
-        echo "Package '$@' not found."
-        exit 104
-    fi
-}
-# function that checks if package is installed then checks if repo is in list
-# if repo is not in list, repo is added with default priority of 100
-function addobsrepo() {
-    local PACKAGE="$(echo $1 | rev | cut -f1 -d'/' | cut -f2- -d'-' | rev)"
-    local REPO_URL="http://download.opensuse.org/repositories/$(echo $1 | rev | cut -f3- -d'/' | rev)"
-    local REPO_RELEASE="$(echo $1 | rev | cut -f3 -d'/' | rev | cut -f2 -d'_')"
-    local PROJECT_NAME="$(echo $1 | rev | cut -f4- -d'/' | rev | tr -d '/')"
-    local REPO_NAME="$(echo $1 | rev | cut -f4- -d'/' | rev | tr -d '/' |tr ':' '_')"
-    if rpm -qa | grep -qm1 "$PACKAGE"; then
-        echo "'$PACKAGE' is already installed."
-        echo "Nothing to do."
+# function to install packages from OBS repos
+installobs() {
+    # if no results, exit
+    if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -eq 0 ]]; then
+        echo "Package '$PACKAGE' not found."
         exit 0
     fi
+    if rpm -qa | grep -qm1 "^$PACKAGE"; then
+        echo "$(tput setaf $COLOR_STATUS)'$PACKAGE' is already installed.$(tput sgr0)"
+        echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"
+        exit 0
+    fi
+    PS3="$(echo -e "\nSelection: ")"
+    echo -e "Select a package to install or enter 'q' to exit: \n"
+    select OBSPKG in $(cat "$HOME"/.cache/zyp/zypsearch.txt | cut -f-5 -d '|' | rev | cut -f2- -d'-' | rev); do
+        if [[ -z "$OBSPKG" ]]; then
+            break
+        fi
+        META_DESC="$(curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/published/$(echo "$OBSPKG" | cut -f3 -d'|')/$(echo "$OBSPKG" | cut -f4 -d'|')/$(echo "$OBSPKG" | cut -f5 -d'|' | cut -f1 -d'-')/$(echo "$OBSPKG" | cut -f1 -d'|')?view=ymp" | head -n -1 | tail -n +2 | xmlstarlet sel -t -v "/group/software/item/description" -n | tr '\n' ' ' | tr -d '*')"
+        PKG_NAME="$(echo "$OBSPKG" | cut -f1 -d'|')"
+        PKG_VERSION="$(echo "$OBSPKG" | cut -f2 -d'|')"
+        PKG_PROJECT="$(echo "$OBSPKG" | cut -f3 -d'|')"
+        PKG_REPO="$(echo "$OBSPKG" | cut -f4 -d'|')"
+        echo -e "\n$(tput setaf $COLOR_STATUS)Name:    $PKG_NAME$(tput sgr0)"
+        echo "Version: $PKG_VERSION"
+        echo "Project: $PKG_PROJECT"
+        echo "Repo:    $PKG_REPO"
+        if [[ ! -z "$META_DESC" ]]; then
+            if [[ $(echo "$META_DESC" | wc -m) -lt 101 ]]; then
+                echo "Summary: $META_DESC"
+            else
+                echo "Summary: "$(echo "$META_DESC" | cut -c-100)"..."
+            fi
+        fi
+        break
+    done
+    if [[ -z "$OBSPKG" ]]; then
+        echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"
+        exit 0
+    fi
+    echo
+    # ask if user wants to install selected package
+    read -p "$(tput bold)Install this package? [y/n] (y):$(tput sgr0) " ASKINSTALL_ANSWER
+    case "$ASKINSTALL_ANSWER" in
+        N|n|No|no) echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"; exit 0;;
+    esac
+    REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/"
+    FULL_REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/$PKG_PROJECT.repo"
+    REPO_NAME="$(echo $PKG_PROJECT | tr ':' '_')"
+    # detect if user already has repo added
     if zypper lr -U | grep -qm1 "$REPO_URL"; then
-        echo "$REPO_URL is already in the list of repositories."
+        echo "$(tput setaf $COLOR_STATUS)$REPO_URL is already in the list of repositories.$(tput sgr0)"
         SKIP_REPOREM="TRUE"
-        installpackage "$SKIP_REPOREM" "$REPO_NAME" "$PACKAGE"
+        
+    # else add repo
     else
         SKIP_REPOREM="FALSE"
-        sudo $ZYPPER ar -f -p $REPO_PRIORITY -n "$REPO_NAME/$REPO_RELEASE" ${REPO_URL}/${PROJECT_NAME}.repo
+        echo "$(tput setaf $COLOR_STATUS)Adding '$REPO_NAME' to list of repositories...$(tput sgr0)"
+        sudo zypper ar -f -p 100 -n "$REPO_NAME/$PKG_REPO" "$FULL_REPO_URL"
         local ZYPPER_EXIT=$?
         case $ZYPPER_EXIT in
+            # if repo added, do nothing
             0)
-                installpackage "$SKIP_REPOREM" "$REPO_NAME" "$PACKAGE"
+                sleep 0
                 ;;
+            # any exit status from zypper other than 0 means repo add failed
             *)
                 exit $ZYPPER_EXIT
                 ;;
         esac
     fi
-}
-# function that installs package and then runs askremove function if SKIP_REPOREM=FALSE
-function installpackage() {
-    local SKIP_REPOREM="$1"
-    local REPO_NAME="$2"
-    local PACKAGE="$3"
-    sudo $ZYPPER install "$PACKAGE"
+    # refresh to make sure user is prompted to trust repo
+    sudo zypper ref
+    echo "$(tput setaf $COLOR_STATUS)Installing '$PKG_NAME' from repo '$REPO_NAME'..."
+    # install package from repo
+    sudo zypper --no-refresh in --from "$REPO_NAME" "$PKG_NAME"
     local ZYPPER_EXIT=$?
-    case $ZYPPER_EXIT in
-        0|4|104)
-            [ "$SKIP_REPOREM" = "FALSE" ] && askremoverepo "$REPO_NAME" "$ZYPPER_EXIT"
-            ;;
-        *)
-            exit $ZYPPER_EXIT
-            ;;
-    esac
+    # ask user if repo should be kept in list if repo was not already in list
+    if [[ "$SKIP_REPOREM" == "FALSE" ]]; then
+        read -p "$(tput bold)Keep '$REPO_NAME' in the list of repositories? [y/n] (y):$(tput sgr0) " ASKREMOVE_ANSWER
+        case "$ASKREMOVE_ANSWER" in
+            # rempve repo if answer is no
+            N|n|No|no)
+                sudo zypper --no-refresh rr "$REPO_NAME"
+                local ZYPPER_EXIT=$?
+                ;;
+        esac
+    fi
+    exit $ZYPPER_EXIT
 }
-# function that asks if repo should be removed after install if it wasn't already in list
-function askremoverepo() {
-    local REPO_NAME="$1"
-    local ZYPPER_EXIT=$2
-    read -p "$(tput bold)Keep '$REPO_NAME' in the list of repositories? [y/n] (y):$(tput sgr0) " ASKREMOVE_ANSWER
-    case "$ASKREMOVE_ANSWER" in
-        N*|n*)
-            unset ZYPPER_EXIT
-            sudo $ZYPPER rr "$REPO_NAME"
-            local ZYPPER_EXIT=$?
-            exit $ZYPPER_EXIT
-            ;;
-        *)
-            exit $ZYPPER_EXIT
-            ;;
+# function to parse openSUSE mailing list rss feeds using xmstarlet
+mailinglist() {
+    # detect which list user wants
+    case "$1" in
+        "") local MAILINGLIST="opensuse-factory";;
+        *) local MAILINGLIST="opensuse-$1";;
     esac
+    curl -sL "https://lists.opensuse.org/$MAILINGLIST/mailinglist.rss" | xmlstarlet sel -t -m "/rss/channel/item" -o "$(tput setaf $COLOR_STATUS)Title: " -v "title" -n -o "$(tput sgr0)Link: " -v "link" -n -o "Date: " -v "pubDate" -n -o "Description:" -v "description" -n -n
 }
-# function to display zyp's help
-function zyphelp() {
+# zyp help output
+zyphelp() {
     printf '%s\n' "
      Arguments provided by zyp:
         changes, ch             Show changes file for specified package(s).  Package(s) must be installed.
         list-files, lf          List files provided by specified package(s).  Package(s) must be installed.
+        local-install, lin      Install a package using only repositories in zypper's list.
+        local-search, lse       Run a search using only repositories in zypper's list.
         mailing-list, ml        Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
                                 Valid choices can be found here: https://lists.opensuse.org/
                                 'rsstail' must be installed to use this argument.
-
-     Subarguments provided by zyp for search/install:
-         --obs, -O              Search for or install only packages from openSUSE Build Service repos.
-                                Ex: 'zyp search --obs package'
-         --local, -L            Search for or install only packages from repos already in list.
-                                Ex: 'zyp search --local package'
-         --priority, -P         Set the priority for the repository when installing packages from OBS repos.
-                                (default is 100)
-                                Ex: 'zyp install --priority 99 package'
+        obs-install, oin        Skip trying to use zypper to install a package and install from OBS repos.
+        obs-search, ose         Skip searching with zypper and search for packages in OBS repos.
+        orphaned, or            Lists installed packages which no longer have a repository associated with them.
+                                '--list or -l' may be used to list only the package names.
+                                '--remove or -r' may be used to remove all orphaned packages (USE WITH CAUTION).
     "
 }
-# function to handle argument input
-function zypstart() {
-    case "$1" in
-        se|search)
-            rm -f /tmp/zypsearch /tmp/zypresults
-            shift
-            for arg in "$@"; do
-                case "$arg" in
-                    -O|--obs)
-                        shift
-                        USE_OSC="TRUE"
-                        ;;
-                    -L|--local)
-                        shift
-                        USE_OSC="FALSE"
-                        ;;
-                esac
-            done
-            searchstart "$@"
-            rm -f /tmp/zypsearch /tmp/zypresults
-            ;;
-        in|install)
-            rm -f /tmp/zypsearch /tmp/zypresults
-            shift
-            for arg in "$@"; do
-                case "$arg" in
-                    -O|--obs)
-                        shift
-                        USE_OSC="TRUE"
-                        ;;
-                    -P|--priority)
-                        shift
-                        REPO_PRIORITY=$1
-                        shift
-                        ;;
-                esac
-            done
-            installstart "$@"
-            rm -f /tmp/zypsearch /tmp/zypresults
-            ;;
-        ps)
-            sudo $ZYPPER ps -s
-            ;;
-        help|-h|--help)
-            $ZYPPER help
-            zyphelp
-            ;;
-        # replace info from 'zypper' with 'rpm -q --info' for much faster results
-        if|info)
-            if [ "$ZYPPER" = "zypper --no-refresh -q" ]; then
-                zypper --no-refresh "$@" | grep -vw "^.*Loading repository data\.\.\..*" | grep -vw "^.*Reading installed packages\.\.\..*" \
-                |grep -vw "^.*Repository .* is out-of-date.*"
-            else
-                $ZYPPER "$@"
-            fi
-            ;;
-        # extra commands provided by rpm
-        ch|changes)
-            shift
-            rpm -q --changes "$@"
-            ;;
-        lf|list-files)
-            shift
-            rpm -q --filesbypkg "$@"
-            ;;
-        # use rsstail to show messages from mailing list rss feed
-        ml|mailing-list)
-            if ! type rsstail > /dev/null 2>&1; then
-                echo "'rsstail' is not installed."
-                echo "To use the 'mailing-list' argument, please install 'rsstail' as shown below:"
-                echo "'zyp in rsstail'"
-                exit 1
-            fi
-            shift
-            if [ -z "$1" ]; then
-                MAILING_LIST="opensuse-factory"
-            else
-                MAILING_LIST="$1"
-            fi
-            shift
-            case "$MAILING_LIST" in
-                opensuse|*-*)
-                    LIST_URL="https://lists.opensuse.org/$MAILING_LIST/mailinglist.rss"
-                    ;;
-                *)
-                    LIST_URL="https://lists.opensuse.org/opensuse-$MAILING_LIST/mailinglist.rss"
-                    ;;
-            esac
-            rsstail -Hd1plu "$LIST_URL" "$@"
-            ;;
-        *)
-            if [ -z "$1" ]; then
-                $ZYPPER help
-                zyphelp
-                exit 0
-            fi
-            $ZYPPER "$@" 2> /tmp/zyperrors
-            local ZYPPER_EXIT=$?
-            case $ZYPPER_EXIT in
-                5)
-                    rm -f /tmp/zyperrors
-                    sudo $ZYPPER "$@"
-                    ;;
-                *)
-                    cat /tmp/zyperrors
-                    rm -f /tmp/zyperrors
-                    exit $ZYPPER_EXIT
-                    ;;
-            esac
-            ;;
-    esac
-}
-# prevent script from running as root unless argument passed
-if [ "$1" = "-S" ] || [ "$1" = "--skip-check" ]; then
-    shift
-elif [ $EUID -eq 0 ]; then
-    echo "It is not recommended to run 'zyp' as root."
-    echo "'zyp' will automatically escalate privileges when necessary."
-    echo "Run 'zyp --skip-check' or 'zyp -S' to bypass this check."
-    exit 1
-fi
-# check if user has logged into osc
-if [ ! -d "$HOME/.config/osc" ] || [ ! -f "$HOME/.config/osc/oscrc" ]; then
-    echo "Please run 'osc' and login before running 'zyp'"
-    echo "If you do not have an account, create one here:"
-    echo "https://secure-www.novell.com/selfreg/jsp/createOpenSuseAccount.jsp?%22"
-    exit 1
-fi
-# enable quiet mode
+
+# case to detect arguments
+# run zypper with --no-refresh whenever possible to speed things up
 case "$1" in
-    -q|--quiet)
+    # search for packages
+    se|search)
+        case "$2" in
+            # if $2 = --match-words, run zypper seach, set MATCH_TEXT to TRUE, and run OBS search
+            --match-words)
+                shift
+                echo -e "$(tput setaf $COLOR_STATUS)Local Repositories Search Results:$(tput sgr0)\n"
+                zyppersearch "$@"
+                shift
+                MATCH_TEXT="TRUE"
+                echo
+                echo -e "$(tput setaf $COLOR_STATUS)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                searchobs "$@"
+                ;;
+            # if $2 = -O or --obs, only run OBS search
+            -O|--obs)
+                shift 2
+                case "$1" in
+                    # if $3 = --match-words, set MATCH_TEXT to TRUE
+                    --match-words)
+                        shift
+                        MATCH_TEXT="TRUE"
+                        echo -e "$(tput setaf $COLOR_STATUS)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        searchobs "$@"
+                        ;;
+                    *)
+                        MATCH_TEXT="FALSE"
+                        echo -e "$(tput setaf $COLOR_STATUS)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        searchobs "$@"
+                        ;;
+                esac
+                ;;
+            # anything starting with letters runs both searches
+            [a-z]*|[A-Z]*)
+                shift
+                echo -e "$(tput setaf $COLOR_STATUS)Local Repositories Search Results:$(tput sgr0)\n"
+                zyppersearch "$@"
+                MATCH_TEXT="FALSE"
+                echo
+                echo -e "$(tput setaf $COLOR_STATUS)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                searchobs "$@"
+                ;;
+            # local repos search only
+            -L|--local) shift 2; zyppersearch "$@"; exit $ZYPPER_EXIT;;
+            # Any other arguments get passed directly to zypper
+            *) shift; zyppersearch "$@"; exit $ZYPPER_EXIT;;
+        esac
+        ;;
+    # shortcut to local search
+    lse|local-search) shift; "$0" se -L "$@";;
+    # shortcut to OBS search
+    ose|obs-search) shift; "$0" se -O "$@";;
+    # if $2 = -O or --obs, install from OBS, otherwise try to install with zypper first
+    in|install)
+        case "$2" in
+            # if $2 = -O or --obs, only run OBS search
+            -O|--obs)
+                shift 2
+                MATCH_TEXT="TRUE"
+                PACKAGE="$1"
+                echo -e "$(tput setaf $COLOR_STATUS)Searching the openSUSE Build Service for '$PACKAGE'...$(tput sgr0)\n"
+                searchobs "--NOPRETTY" "$PACKAGE"
+                installobs
+                ;;
+            # anything starting with letters runs both searches
+            # if zypper fails, try to find package in OBS
+            [a-z]*|[A-Z]*)
+                sudo zypper "$@"
+                ZYPPER_EXIT=$?
+                case $ZYPPER_EXIT in
+                    # if zypper exits 104, package wasn't found, so search with osc
+                    104)
+                        echo -e "\nPackage not found in repo list; searching with openSUSE Build Service...\n"
+                        shift 2
+                        MATCH_TEXT="TRUE"
+                        searchobs "--NOPRETTY" "$@"
+                        installobs
+                        ;;
+                    *)
+                        exit $ZYPPER_EXIT
+                        ;;
+                esac
+                ;;
+            # local repos search only
+            -L|--local) shift; sudo zypper "$@";;
+            # Any other arguments get passed directly to zypper
+            *) sudo zypper "$@";;
+        esac
+        ;;
+    # shortcut to local install
+    lin|local-install) shift; "$0" in -L "$@";;
+    # shortcut to OBS install
+    oin|obs-install) shift; "$0" in -O "$1";;
+    # if zypper fails, try to find package in OBS
+    if|info)
+        # zypper exits with 0 here regardless of package found or not, so check output for 'not found.'
+        # if not found, search API and get info about latest build
+        if [[ "$(zypper --no-refresh --no-color -q "$@" | tail -n +3)" =~ "not found." ]]; then
+            shift
+            MATCH_TEXT="TRUE"
+            unset SUPPLEMENTS SUGGESTS REQUIRES RECOMMENDS PROVIDES OBSOLETES CONFLICTS
+            # detect argument input
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --supplements) shift; SUPPLEMENTS="TRUE";;
+                    --suggests) shift; SUGGESTS="TRUE";;
+                    --requires) shift; REQUIRES="TRUE";;
+                    --recommends) shift; RECOMMENDS="TRUE";;
+                    --provides) shift; PROVIDES="TRUE";;
+                    --obsoletes) shift; OBSOLETES="TRUE";;
+                    --conflicts) shift; CONFLICTS="TRUE";;
+                    *) PACKAGE="$1"; shift;;
+                esac
+            done
+            # search for package to find info needed for build info API call
+            searchobs "--NOPRETTY" "$PACKAGE"
+            # get info about package
+            infoobs
+        # if output doesn't contain 'not found.', run zypper with user's input piped to tail -n +5 to get rid of repo loading output
+        else
+            zypper --no-refresh "$@" | tail -n +5
+        fi
+        ;;
+    # --no-refresh to save time
+    rm|remove) sudo zypper --no-refresh "$@";;
+    # list and remove orphaned packages
+    or|orphaned)
+        case "$2" in
+            # list orphaned packages separated by spaces
+            -l|--list) zypper --no-color --no-refresh -q pa --orphaned | tail -n +3 | cut -f3 -d'|' | tr -d ' ' | tr '\n' ' '; echo;;
+            # prompt to remove all orphaned packages
+            -r|--remove) sudo zypper --no-refresh rm -u $(zypper --no-color --no-refresh -q pa --orphaned | tail -n +3 | cut -f3 -d'|' | tr -d ' ' | tr '\n' ' ');;
+            # list orphaned packages in similar fashion to search output
+            *)
+                zypper --no-color --no-refresh -q pa --orphaned | tail -n +3 > "$HOME"/.cache/zyp/zyporphaned.txt
+                for package in $(cat "$HOME"/.cache/zyp/zyporphaned.txt | cut -f3 -d'|' | tr -d ' '); do
+                    echo "$(tput setaf $COLOR_STATUS)Name:    $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f3 -d'|' | tr -d ' ')$(tput sgr0)"
+                    echo "Status:  $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f1 -d'|' | tr -d ' ')"
+                    echo "Version: $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f4 -d'|' | tr -d ' ')"
+                    echo "Arch:    $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f5 -d'|' | tr -d ' ')"
+                    echo "Repo:    $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f2 -d'|' | tr -d ' ')"
+                done
+                rm -f "$HOME"/.cache/zyp/zyporphaned.txt
+                ;;
+        esac
+        ;;
+    # --no-refresh to save time
+    pa|packages) zypper --no-refresh "$@";;
+    # use rpm to get changelog for installed packages
+    ch|changes)
         shift
-        ZYPPER="zypper --no-refresh -q"
-        USE_RPM="FALSE"
+        rpm -q --changes "$@"
+        ;;
+    # use rpm to list files of installed packages
+    lf|list-files)
+        shift
+        rpm -q --filesbypkg "$@"
+        ;;
+    # run zypper ps -s as root
+    ps)
+        sudo zypper ps -s
+        ;;
+    # use xmlstarlet to get feeds from mailing lists
+    ml|mailing-list)
+        shift
+        mailinglist "$@"
+        ;;
+    # help output
+    help|-h|--help)
+        $ZYPPER help
+        zyphelp
         ;;
     *)
-        ZYPPER="zypper"
-        USE_RPM="FALSE"
+        # output help if no input
+        if [ -z "$1" ]; then
+            zypper help
+            zyphelp
+            exit 0
+        fi
+        # try to run zypper without sudo first
+        zypper "$@" 2> ~/.cache/zyp/zyperrors
+        ZYPPER_EXIT=$?
+        case $ZYPPER_EXIT in
+            # if zypper exit code is 5, failed because of perms; re-run with sudo
+            5)
+                rm -f ~/.cache/zyp/zyperrors
+                sudo zypper "$@"
+                ;;
+            # otherwise output errors and exit
+            *)
+                cat ~/.cache/zyp/zyperrors
+                rm -f ~/.cache/zyp/zyperrors
+                exit $ZYPPER_EXIT
+                ;;
+        esac
         ;;
 esac
-zypstart "$@" && exit 0

@@ -357,18 +357,18 @@ zyphelp() {
 printf '%s\n' "
   Arguments provided by zyp:
 
-       changes, ch          Show changes file for specified package(s).  Package(s) must be installed.
-       list-files, lf       List files provided by specified package(s).  Package(s) must be installed.
-       local-install, lin   Install a package using only repositories in zypper's list.
-       local-search, lse    Run a search using only repositories in zypper's list.
-       mailing-list, ml     Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
-                            Valid choices can be found here: https://lists.opensuse.org/
-                            'rsstail' must be installed to use this argument.
-       obs-install, oin     Skip trying to use zypper to install a package and install from OBS repos.
-       obs-search, ose      Skip searching with zypper and search for packages in OBS repos.
-       orphaned, or         Lists installed packages which no longer have a repository associated with them.
-                            '--list or -l' may be used to list only the package names.
-                            '--remove or -r' may be used to remove all orphaned packages (USE WITH CAUTION).
+      changes, ch          Show changes file for specified package(s).  Package(s) must be installed.
+      list-files, lf       List files provided by specified package(s).  Package(s) must be installed.
+      local-install, lin   Install a package using only repositories in zypper's list.
+      local-search, lse    Run a search using only repositories in zypper's list.
+      mailing-list, ml     Show latest posts from specified mailing list.  Default list is 'opensuse-factory'.
+                           Valid choices can be found here: https://lists.opensuse.org/
+                           'rsstail' must be installed to use this argument.
+      obs-install, oin     Skip trying to use zypper to install a package and install from OBS repos.
+      obs-search, ose      Skip searching with zypper and search for packages in OBS repos.
+      orphaned, or         Lists installed packages which no longer have a repository associated with them.
+                           '--list or -l' may be used to list only the package names.
+                           '--remove or -r' may be used to remove all orphaned packages (USE WITH CAUTION).
 "
 }
 

@@ -162,11 +162,11 @@ _zypper_cmd_do() {
           fi
 
           case $cmd in
-              (in|install)
+              (in|install|lin|local-install)
                   pkglist=( $_zypp_not_installed )
                   compadd $pkglist && return
                   ;;
-              (rm|remove|up|update)
+              (rm|remove|up|update|ch|changes|lf|list-files)
                   pkglist=( $_zypp_installed )
                   compadd $pkglist && return
                   ;;

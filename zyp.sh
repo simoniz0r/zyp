@@ -64,21 +64,28 @@ colorparse() {
 }
 if [[ -f "/etc/zypp/zypper.conf" ]]; then
     USE_COLORS="$(cat /etc/zypp/zypper.conf | grep 'useColors' | cut -f3 -d' ')"
-    if [[ "$USE_COLORS" != "never" ]]; then
-        COLOR_STATUS="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgStatus' | cut -f3 -d' '))"
-        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgError' | cut -f3 -d' '))"
-        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgWarning' | cut -f3 -d' '))"
-        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'positive =' | cut -f3 -d' '))"
-        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'negative =' | cut -f3 -d' '))"
+    if [[ "$1" == "--no-color" ]]; then
+        shift
+        COLOR_INFO="7"
+        COLOR_ERROR="7"
+        COLOR_WARNING="7"
+        COLOR_POSITIVE="7"
+        COLOR_NEGATIVE="7"
+    elif [[ "$USE_COLORS" != "never" ]]; then
+        COLOR_INFO="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'highlight =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgError' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgWarning' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'positive =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'negative =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
     else
-        COLOR_STATUS="7"
+        COLOR_INFO="7"
         COLOR_ERROR="7"
         COLOR_WARNING="7"
         COLOR_POSITIVE="7"
         COLOR_NEGATIVE="7"
     fi
 else
-    COLOR_STATUS="2"
+    COLOR_INFO="2"
     COLOR_ERROR="1"
     COLOR_WARNING="3"
     COLOR_POSITIVE="4"
@@ -93,7 +100,7 @@ zyppersearch() {
         ZYPPER_EXIT=104
     else
         for result in $(cat "$HOME"/.cache/zyp/zypsearch.txt); do
-            echo "$(tput setaf $COLOR_STATUS)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
+            echo "$(tput setaf $COLOR_INFO)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
             echo "Status:  "$(echo "$result" | cut -f2 -d'|')""
             echo "Type:    "$(echo "$result" | cut -f3 -d'|')""
             echo "Summary: "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')""
@@ -130,7 +137,7 @@ searchobs() {
             if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -lt 6 ]]; then
                 META_DESC="$(curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/published/$(echo "$result" | cut -f3 -d'|')/$(echo "$result" | cut -f4 -d'|')/$(echo "$result" | cut -f5 -d'|' | cut -f1 -d'-')/$(echo "$result" | cut -f1 -d'|')?view=ymp" | head -n -1 | tail -n +2 | xmlstarlet sel -t -v "/group/software/item/description" -n | tr '\n' ' ' | tr -d '*')"
             fi
-            echo "$(tput setaf $COLOR_STATUS)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
+            echo "$(tput setaf $COLOR_INFO)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
             echo "Version: "$(echo "$result" | cut -f2 -d'|')""
             echo "Project: "$(echo "$result" | cut -f3 -d'|')""
             echo "Repo:    "$(echo "$result" | cut -f4 -d'|')""
@@ -165,91 +172,91 @@ infoobs() {
     done
     echo
     # output info about package
-    echo "Repository   $(tput setaf $COLOR_STATUS):$(tput sgr0) $(echo "$RESULT" | cut -f4 -d'|')"
-    echo "Name         $(tput setaf $COLOR_STATUS):$(tput sgr0) $(echo "$RESULT" | cut -f1 -d'|')"
-    echo "Version      $(tput setaf $COLOR_STATUS):$(tput sgr0) $(echo "$RESULT" | cut -f2 -d'|')-$(xmlstarlet sel -t -v "/fileinfo/release" "$HOME"/.cache/zyp/fileinfo.xml)"
-    echo "Vendor       $(tput setaf $COLOR_STATUS):$(tput sgr0) obs://build.opensuse.org/$(echo "$RESULT" | cut -f3 -d'|')"
-    echo "Package Size $(tput setaf $COLOR_STATUS):$(tput sgr0) $(awk "BEGIN {print $(xmlstarlet sel -t -v "/fileinfo/size" "$HOME"/.cache/zyp/fileinfo.xml)/1024/1024}" | cut -c-5) MiB"
-    echo "Installed    $(tput setaf $COLOR_STATUS):$(tput sgr0) No"
-    echo "Status       $(tput setaf $COLOR_STATUS):$(tput sgr0) not installed"
-    echo "Summary      $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/summary" "$HOME"/.cache/zyp/fileinfo.xml)"
-    echo "Description  $(tput setaf $COLOR_STATUS):$(tput sgr0)"
-    echo "    $(tput setaf $COLOR_STATUS)$(xmlstarlet sel -t -v "/fileinfo/description" "$HOME"/.cache/zyp/fileinfo.xml)$(tput sgr0)"
+    echo "Repository   $(tput setaf $COLOR_INFO):$(tput sgr0) $(echo "$RESULT" | cut -f4 -d'|')"
+    echo "Name         $(tput setaf $COLOR_INFO):$(tput sgr0) $(echo "$RESULT" | cut -f1 -d'|')"
+    echo "Version      $(tput setaf $COLOR_INFO):$(tput sgr0) $(echo "$RESULT" | cut -f2 -d'|')-$(xmlstarlet sel -t -v "/fileinfo/release" "$HOME"/.cache/zyp/fileinfo.xml)"
+    echo "Vendor       $(tput setaf $COLOR_INFO):$(tput sgr0) obs://build.opensuse.org/$(echo "$RESULT" | cut -f3 -d'|')"
+    echo "Package Size $(tput setaf $COLOR_INFO):$(tput sgr0) $(awk "BEGIN {print $(xmlstarlet sel -t -v "/fileinfo/size" "$HOME"/.cache/zyp/fileinfo.xml)/1024/1024}" | cut -c-5) MiB"
+    echo "Installed    $(tput setaf $COLOR_INFO):$(tput sgr0) No"
+    echo "Status       $(tput setaf $COLOR_INFO):$(tput sgr0) not installed"
+    echo "Summary      $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/summary" "$HOME"/.cache/zyp/fileinfo.xml)"
+    echo "Description  $(tput setaf $COLOR_INFO):$(tput sgr0)"
+    echo "    $(tput setaf $COLOR_INFO)$(xmlstarlet sel -t -v "/fileinfo/description" "$HOME"/.cache/zyp/fileinfo.xml)$(tput sgr0)"
     # if --provides was used, output provides
     if [[ "$PROVIDES" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Provides     $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Provides     $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for prov in $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$prov$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$prov$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Provides     $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Provides     $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/provides" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     # if --requires was used, output requires
     if [[ "$REQUIRES" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Requires    $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Requires    $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for req in $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$req$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$req$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Requires     $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Requires     $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/requires" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     # if --conflicts was used, output conflicts
     if [[ "$CONFLICTS" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Conflicts    $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Conflicts    $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for conf in $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$conf$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$conf$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Conflicts    $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Conflicts    $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/conflicts" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     # of --obsoletes was used, output obsoletes
     if [[ "$OBSOLETES" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Obsoletes    $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Obsoletes    $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for obso in $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$obso$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$obso$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Obsoletes    $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Obsoletes    $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/obsoletes" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     # if --recommends was used, output recommends
     if [[ "$RECOMMENDS" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Recommends   $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Recommends   $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for rec in $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$rec$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$rec$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Recommends   $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Recommends   $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/recommends" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     # if --suggests was used, output suggests
     if [[ "$SUGGESTS" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Suggests     $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Suggests     $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for sugg in $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$sugg$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$sugg$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Suggests     $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Suggests     $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/suggests" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     # if --supplements was used, output supplements
     if [[ "$SUPPLEMENTS" == "TRUE" ]]; then
         if [[ $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | wc -l) -gt 1 ]]; then
-            echo "Supplements  $(tput setaf $COLOR_STATUS):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
+            echo "Supplements  $(tput setaf $COLOR_INFO):$(tput sgr0) [$(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | wc -l)]"
             for supp in $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml | tr ' ' '#'); do
-                echo "    $(tput setaf $COLOR_STATUS)$supp$(tput sgr0)" | tr '#' ' '
+                echo "    $(tput setaf $COLOR_INFO)$supp$(tput sgr0)" | tr '#' ' '
             done
         else
-            echo "Supplements   $(tput setaf $COLOR_STATUS):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml)"
+            echo "Supplements   $(tput setaf $COLOR_INFO):$(tput sgr0) $(xmlstarlet sel -t -v "/fileinfo/supplements" "$HOME"/.cache/zyp/fileinfo.xml)"
         fi
     fi
     echo
@@ -262,8 +269,8 @@ installobs() {
         exit 0
     fi
     if rpm -qa | grep -qm1 "^$PACKAGE"; then
-        echo "$(tput setaf $COLOR_STATUS)'$PACKAGE' is already installed.$(tput sgr0)"
-        echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"
+        echo "$(tput setaf $COLOR_INFO)'$PACKAGE' is already installed.$(tput sgr0)"
+        echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"
         exit 0
     fi
     PS3="$(echo -e "\nSelection: ")"
@@ -277,7 +284,7 @@ installobs() {
         PKG_VERSION="$(echo "$OBSPKG" | cut -f2 -d'|')"
         PKG_PROJECT="$(echo "$OBSPKG" | cut -f3 -d'|')"
         PKG_REPO="$(echo "$OBSPKG" | cut -f4 -d'|')"
-        echo -e "\n$(tput setaf $COLOR_STATUS)Name:    $PKG_NAME$(tput sgr0)"
+        echo -e "\n$(tput setaf $COLOR_INFO)Name:    $PKG_NAME$(tput sgr0)"
         echo "Version: $PKG_VERSION"
         echo "Project: $PKG_PROJECT"
         echo "Repo:    $PKG_REPO"
@@ -291,26 +298,26 @@ installobs() {
         break
     done
     if [[ -z "$OBSPKG" ]]; then
-        echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"
+        echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"
         exit 0
     fi
     echo
     # ask if user wants to install selected package
     read -p "$(tput bold)Install this package? [y/n] (y):$(tput sgr0) " ASKINSTALL_ANSWER
     case "$ASKINSTALL_ANSWER" in
-        N|n|No|no) echo "$(tput setaf $COLOR_STATUS)Nothing to do.$(tput sgr0)"; exit 0;;
+        N|n|No|no) echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"; exit 0;;
     esac
     REPO_URL="http://download.opensuse.org/repositories/$(echo "$PKG_PROJECT" | sed 's%:%:\/%g')/$(echo "$PKG_REPO" | sed 's%:%:\/%g')/"
     FULL_REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/$PKG_PROJECT.repo"
     REPO_NAME="$(echo $PKG_PROJECT | tr ':' '_')"
     # detect if user already has repo added
     if zypper -x lr | xmlstarlet sel -t -v "/stream/repo-list/repo/url" -n | grep -qm1 "$REPO_URL"; then
-        echo "$(tput setaf $COLOR_STATUS)$REPO_URL is already in the list of repositories.$(tput sgr0)"
+        echo "$(tput setaf $COLOR_INFO)$REPO_URL is already in the list of repositories.$(tput sgr0)"
         SKIP_REPOREM="TRUE"
     # else add repo
     else
         SKIP_REPOREM="FALSE"
-        echo "$(tput setaf $COLOR_STATUS)Adding '$REPO_NAME' to list of repositories...$(tput sgr0)"
+        echo "$(tput setaf $COLOR_INFO)Adding '$REPO_NAME' to list of repositories...$(tput sgr0)"
         sudo zypper ar -f -p 100 -n "$REPO_NAME/$PKG_REPO" "$FULL_REPO_URL"
         local ZYPPER_EXIT=$?
         case $ZYPPER_EXIT in
@@ -326,7 +333,7 @@ installobs() {
     fi
     # refresh to make sure user is prompted to trust repo
     sudo zypper ref
-    echo "$(tput setaf $COLOR_STATUS)Installing '$PKG_NAME' from repo '$REPO_NAME'..."
+    echo "$(tput setaf $COLOR_INFO)Installing '$PKG_NAME' from repo '$REPO_NAME'..."
     # install package from repo
     sudo zypper --no-refresh in --from "$REPO_NAME" "$PKG_NAME"
     local ZYPPER_EXIT=$?
@@ -350,7 +357,7 @@ mailinglist() {
         "") local MAILINGLIST="opensuse-factory";;
         *) local MAILINGLIST="opensuse-$1";;
     esac
-    curl -sL "https://lists.opensuse.org/$MAILINGLIST/mailinglist.rss" | xmlstarlet sel -t -m "/rss/channel/item" -o "$(tput setaf $COLOR_STATUS)Title: " -v "title" -n -o "$(tput sgr0)Link: " -v "link" -n -o "Date: " -v "pubDate" -n -o "Description:" -v "description" -n -n
+    curl -sL "https://lists.opensuse.org/$MAILINGLIST/mailinglist.rss" | xmlstarlet sel -t -m "/rss/channel/item" -o "$(tput setaf $COLOR_INFO)Title: " -v "title" -n -o "$(tput sgr0)Link: " -v "link" -n -o "Date: " -v "pubDate" -n -o "Description:" -v "description" -n -n
 }
 # zyp help output
 zyphelp() {
@@ -381,12 +388,12 @@ case "$1" in
             # if $2 = --match-words, run zypper seach, set MATCH_TEXT to TRUE, and run OBS search
             --match-words)
                 shift
-                echo -e "$(tput setaf $COLOR_STATUS)Local Repositories Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_INFO)Local Repositories Search Results:$(tput sgr0)\n"
                 zyppersearch "$@"
                 shift
                 MATCH_TEXT="TRUE"
                 echo
-                echo -e "$(tput setaf $COLOR_STATUS)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_INFO)openSUSE Build Service Search Results:$(tput sgr0)\n"
                 searchobs "$@"
                 ;;
             # if $2 = -O or --obs, only run OBS search
@@ -397,12 +404,12 @@ case "$1" in
                     --match-words)
                         shift
                         MATCH_TEXT="TRUE"
-                        echo -e "$(tput setaf $COLOR_STATUS)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        echo -e "$(tput setaf $COLOR_INFO)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
                         searchobs "$@"
                         ;;
                     *)
                         MATCH_TEXT="FALSE"
-                        echo -e "$(tput setaf $COLOR_STATUS)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        echo -e "$(tput setaf $COLOR_INFO)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
                         searchobs "$@"
                         ;;
                 esac
@@ -410,11 +417,11 @@ case "$1" in
             # anything starting with letters runs both searches
             [a-z]*|[A-Z]*)
                 shift
-                echo -e "$(tput setaf $COLOR_STATUS)Local Repositories Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_INFO)Local Repositories Search Results:$(tput sgr0)\n"
                 zyppersearch "$@"
                 MATCH_TEXT="FALSE"
                 echo
-                echo -e "$(tput setaf $COLOR_STATUS)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_INFO)openSUSE Build Service Search Results:$(tput sgr0)\n"
                 searchobs "$@"
                 ;;
             # local repos search only
@@ -435,7 +442,7 @@ case "$1" in
                 shift 2
                 MATCH_TEXT="TRUE"
                 PACKAGE="$1"
-                echo -e "$(tput setaf $COLOR_STATUS)Searching the openSUSE Build Service for '$PACKAGE'...$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_INFO)Searching the openSUSE Build Service for '$PACKAGE'...$(tput sgr0)\n"
                 searchobs "--NOPRETTY" "$PACKAGE"
                 installobs
                 ;;
@@ -512,7 +519,7 @@ case "$1" in
             *)
                 zypper --no-color --no-refresh -q pa --orphaned | tail -n +3 > "$HOME"/.cache/zyp/zyporphaned.txt
                 for package in $(cat "$HOME"/.cache/zyp/zyporphaned.txt | cut -f3 -d'|' | tr -d ' '); do
-                    echo "$(tput setaf $COLOR_STATUS)Name:    $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f3 -d'|' | tr -d ' ')$(tput sgr0)"
+                    echo "$(tput setaf $COLOR_INFO)Name:    $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f3 -d'|' | tr -d ' ')$(tput sgr0)"
                     echo "Status:  $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f1 -d'|' | tr -d ' ')"
                     echo "Version: $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f4 -d'|' | tr -d ' ')"
                     echo "Arch:    $(cat "$HOME"/.cache/zyp/zyporphaned.txt | grep -w "$package" | cut -f5 -d'|' | tr -d ' ')"

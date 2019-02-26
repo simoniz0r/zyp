@@ -10,37 +10,37 @@ if [[ $EUID -eq 0 ]]; then
     echo "Do not run 'zyp' as root!"
     exit 1
 fi
-# check if zyp cache dir exists
-if [[ ! -d "$HOME/.cache/zyp" ]]; then
-    mkdir -p "$HOME"/.cache/zyp
-fi
-# check if zyp config dir exists
-if [[ ! -d "$HOME/.config/zyp" ]]; then
-    # create config dir, config file, and then exit
-    mkdir -p "$HOME"/.config/zyp
-    echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp/zyp.conf
-    echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
-    echo "If you do not have a username and password, sign up for one here:"
-    echo "https://build.opensuse.org/session/new"
-    exit 1
-fi
-# make sure config file exists
-if [[ ! -f "$HOME/.config/zyp/zyp.conf" ]]; then
-    echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp
-    echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
-    echo "If you do not have a username and password, sign up for one here:"
-    echo "https://build.opensuse.org/session/new"
-    exit 1
-fi
-# source config file and check variables
-source "$HOME"/.config/zyp/zyp.conf
-if [[ -z "$OBS_USERNAME" ]] || [[ -z "$OBS_PASSWORD" ]]; then
-    echo "Missing openSUSE Build Service username and/or password in '$HOME/.config/zyp/zyp.conf'."
-    echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
-    echo "If you do not have a username and password, sign up for one here:"
-    echo "https://build.opensuse.org/session/new"
-    exit 1
-fi
+# # check if zyp cache dir exists
+# if [[ ! -d "$HOME/.cache/zyp" ]]; then
+#     mkdir -p "$HOME"/.cache/zyp
+# fi
+# # check if zyp config dir exists
+# if [[ ! -d "$HOME/.config/zyp" ]]; then
+#     # create config dir, config file, and then exit
+#     mkdir -p "$HOME"/.config/zyp
+#     echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp/zyp.conf
+#     echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
+#     echo "If you do not have a username and password, sign up for one here:"
+#     echo "https://build.opensuse.org/session/new"
+#     exit 1
+# fi
+# # make sure config file exists
+# if [[ ! -f "$HOME/.config/zyp/zyp.conf" ]]; then
+#     echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp
+#     echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
+#     echo "If you do not have a username and password, sign up for one here:"
+#     echo "https://build.opensuse.org/session/new"
+#     exit 1
+# fi
+# # source config file and check variables
+# source "$HOME"/.config/zyp/zyp.conf
+# if [[ -z "$OBS_USERNAME" ]] || [[ -z "$OBS_PASSWORD" ]]; then
+#     echo "Missing openSUSE Build Service username and/or password in '$HOME/.config/zyp/zyp.conf'."
+#     echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
+#     echo "If you do not have a username and password, sign up for one here:"
+#     echo "https://build.opensuse.org/session/new"
+#     exit 1
+# fi
 # detect which version of openSUSE we're running
 OPENSUSE_VERSION=$(rpm --eval "%{?suse_version}")
 if [[ $OPENSUSE_VERSION -ge 1550 ]]; then
@@ -48,6 +48,12 @@ if [[ $OPENSUSE_VERSION -ge 1550 ]]; then
 else
     OPENSUSE_VERSION="openSUSE_Leap_$(echo $OPENSUSE_VERSION | cut -c-2)"
 fi
+# get api username and password from https://raw.githubusercontent.com/openSUSE/software-o-o/master/config/options.yml
+obsauth() {
+    local USERANDPASS="$(curl -sL "https://raw.githubusercontent.com/openSUSE/software-o-o/master/config/options.yml" | grep -A1 -m1 'api_username' | cut -f4 -d' ' | tr '\n' ':')"
+    export OBS_USERNAME="$(echo "$USERANDPASS" | cut -f1 -d':')"
+    export OBS_PASSWORD="$(echo "$USERANDPASS" | cut -f2 -d':')"
+}
 # get colors from zypper.conf
 colorparse() {
     case "$1" in
@@ -100,10 +106,11 @@ zyppersearch() {
         ZYPPER_EXIT=104
     else
         for result in $(cat "$HOME"/.cache/zyp/zypsearch.txt); do
-            echo "$(tput setaf $COLOR_INFO)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
-            echo "Status:  "$(echo "$result" | cut -f2 -d'|')""
-            echo "Type:    "$(echo "$result" | cut -f3 -d'|')""
-            echo "Summary: "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')""
+            echo "$(tput setaf $COLOR_INFO)"$(echo "$result" | cut -f1 -d'|')"$(tput sgr0) "\($(echo "$result" | cut -f3 -d'|')\)" "\[$(echo "$result" | cut -f2 -d'|')\]""
+            echo -e "    "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')"\n"
+            # echo "Status:  "$(echo "$result" | cut -f2 -d'|')""
+            # echo "Type:    "$(echo "$result" | cut -f3 -d'|')""
+            # echo "Summary: "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')""
         done > "$HOME"/.cache/zyp/zypresults.txt
         cat "$HOME"/.cache/zyp/zypresults.txt
         rm -f "$HOME"/.cache/zyp/zypresults.txt
@@ -123,7 +130,7 @@ searchobs() {
         | grep -v 'src-arch' | grep "$OPENSUSE_VERSION" | grep "noarch\|$(uname -m)" > "$HOME"/.cache/zyp/zypsearch.txt
     else
         curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/search/published/binary/id?match=contains%28%40name%2C+%27$1%27%29" > "$HOME"/.cache/zyp/zypsearch.xml
-        xmlstarlet sel -t -m "/collection/binary" -v "concat(@name,'|',@version,'|',@project,'|',@repository,'|',@arch,'-arch')" -n "$HOME"/.cache/zyp/zypsearch.xml \
+        xmlstarlet sel -t -m "/collection/binary" -v "concat(@name,'|',@version,'|',@project,'|',@repository,'|',@arch,'-arch','|',@package,'|',@filename)" -n "$HOME"/.cache/zyp/zypsearch.xml \
         | grep -v 'src-arch' | grep "$OPENSUSE_VERSION" | grep "noarch\|$(uname -m)" > "$HOME"/.cache/zyp/zypsearch.txt
     fi
     rm -f "$HOME"/.cache/zyp/zypsearch.xml
@@ -137,17 +144,18 @@ searchobs() {
             if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -lt 6 ]]; then
                 META_DESC="$(curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/published/$(echo "$result" | cut -f3 -d'|')/$(echo "$result" | cut -f4 -d'|')/$(echo "$result" | cut -f5 -d'|' | cut -f1 -d'-')/$(echo "$result" | cut -f1 -d'|')?view=ymp" | head -n -1 | tail -n +2 | xmlstarlet sel -t -v "/group/software/item/description" -n | tr '\n' ' ' | tr -d '*')"
             fi
-            echo "$(tput setaf $COLOR_INFO)Name:    "$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)"
-            echo "Version: "$(echo "$result" | cut -f2 -d'|')""
-            echo "Project: "$(echo "$result" | cut -f3 -d'|')""
-            echo "Repo:    "$(echo "$result" | cut -f4 -d'|')""
+            echo "$(tput setaf $COLOR_INFO)"$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)/"$(echo "$result" | cut -f3 -d'|')" "$(echo "$result" | cut -f4 -d'|')" "$(echo "$result" | cut -f2 -d'|')""
+            # echo "Version: "$(echo "$result" | cut -f2 -d'|')""
+            # echo "Project: "$(echo "$result" | cut -f3 -d'|')""
+            # echo "Repo:    "$(echo "$result" | cut -f4 -d'|')""
             if [[ ! -z "$META_DESC" ]]; then
                 if [[ $(echo "$META_DESC" | wc -m) -lt 101 ]]; then
-                    echo "Summary: $META_DESC"
+                    echo "    $META_DESC"
                 else
-                    echo "Summary: "$(echo "$META_DESC" | cut -c-100)"..."
+                    echo "    "$(echo "$META_DESC" | cut -c-100)"..."
                 fi
             fi
+            echo
         done > "$HOME"/.cache/zyp/zypresults.txt
         cat "$HOME"/.cache/zyp/zypresults.txt
         rm -f "$HOME"/.cache/zyp/zypresults.txt
@@ -157,7 +165,7 @@ searchobs() {
 infoobs() {
     # if no results, exit
     if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -eq 0 ]]; then
-        echo "Package '$PACKAGE' not found."
+        echo "$(tput setaf $COLOR_NEGATIVE)Package '$PACKAGE' not found.$(tput sgr0)"
         exit 0
     fi
     # get the first result from searchobs
@@ -265,7 +273,7 @@ infoobs() {
 installobs() {
     # if no results, exit
     if [[ $(cat "$HOME"/.cache/zyp/zypsearch.txt | wc -l) -eq 0 ]]; then
-        echo "Package '$PACKAGE' not found."
+        echo "$(tput setaf $COLOR_NEGATIVE)Package '$PACKAGE' not found.$(tput sgr0)"
         exit 0
     fi
     if rpm -qa | grep -qm1 "^$PACKAGE"; then
@@ -386,14 +394,19 @@ case "$1" in
     se|search)
         case "$2" in
             # if $2 = --match-words, run zypper seach, set MATCH_TEXT to TRUE, and run OBS search
-            --match-words)
+            --binary|-b)
+                shift 2
+                cnf "$@" 2>&1 | sed 's%sudo zypper install%zyp install%'
+                ;;
+            -w|--match-words)
                 shift
-                echo -e "$(tput setaf $COLOR_INFO)Local Repositories Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_POSITIVE)Local Repositories Search Results:$(tput sgr0)\n"
                 zyppersearch "$@"
                 shift
                 MATCH_TEXT="TRUE"
                 echo
-                echo -e "$(tput setaf $COLOR_INFO)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_POSITIVE)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                obsauth
                 searchobs "$@"
                 ;;
             # if $2 = -O or --obs, only run OBS search
@@ -401,15 +414,17 @@ case "$1" in
                 shift 2
                 case "$1" in
                     # if $3 = --match-words, set MATCH_TEXT to TRUE
-                    --match-words)
+                    -w|--match-words)
                         shift
                         MATCH_TEXT="TRUE"
-                        echo -e "$(tput setaf $COLOR_INFO)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        echo -e "$(tput setaf $COLOR_POSITIVE)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        obsauth
                         searchobs "$@"
                         ;;
                     *)
                         MATCH_TEXT="FALSE"
-                        echo -e "$(tput setaf $COLOR_INFO)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        echo -e "$(tput setaf $COLOR_POSITIVE)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
+                        obsauth
                         searchobs "$@"
                         ;;
                 esac
@@ -417,11 +432,11 @@ case "$1" in
             # anything starting with letters runs both searches
             [a-z]*|[A-Z]*)
                 shift
-                echo -e "$(tput setaf $COLOR_INFO)Local Repositories Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_POSITIVE)Local Repositories Search Results:$(tput sgr0)\n"
                 zyppersearch "$@"
                 MATCH_TEXT="FALSE"
-                echo
-                echo -e "$(tput setaf $COLOR_INFO)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_POSITIVE)openSUSE Build Service Search Results:$(tput sgr0)\n"
+                obsauth
                 searchobs "$@"
                 ;;
             # local repos search only
@@ -442,7 +457,8 @@ case "$1" in
                 shift 2
                 MATCH_TEXT="TRUE"
                 PACKAGE="$1"
-                echo -e "$(tput setaf $COLOR_INFO)Searching the openSUSE Build Service for '$PACKAGE'...$(tput sgr0)\n"
+                echo -e "$(tput setaf $COLOR_POSITIVE)Searching the openSUSE Build Service for '$PACKAGE'...$(tput sgr0)\n"
+                obsauth
                 searchobs "--NOPRETTY" "$PACKAGE"
                 installobs
                 ;;
@@ -454,10 +470,11 @@ case "$1" in
                 case $ZYPPER_EXIT in
                     # if zypper exits 104, package wasn't found, so search with osc
                     104)
-                        echo -e "\nPackage not found in repo list; searching with openSUSE Build Service...\n"
+                        echo -e "\n$(tput setaf $COLOR_POSITIVE)Package not found in repo list; searching with openSUSE Build Service...$(tput sgr0)\n"
                         shift
                         MATCH_TEXT="TRUE"
                         PACKAGE="$1"
+                        obsauth
                         searchobs "--NOPRETTY" "$PACKAGE"
                         installobs
                         ;;
@@ -467,7 +484,7 @@ case "$1" in
                 esac
                 ;;
             # local repos search only
-            -L|--local) shift; sudo zypper "$@";;
+            -L|--local) shift 2; sudo zypper install "$@";;
             # Any other arguments get passed directly to zypper
             *) sudo zypper "$@";;
         esac
@@ -498,6 +515,7 @@ case "$1" in
                 esac
             done
             # search for package to find info needed for build info API call
+            obsauth
             searchobs "--NOPRETTY" "$PACKAGE"
             # get info about package
             infoobs
@@ -551,17 +569,13 @@ case "$1" in
         mailinglist "$@"
         ;;
     # help output
-    help|-h|--help)
-        $ZYPPER help
-        zyphelp
+    help|-h|--help|"")
+        zypper "$@"
+        if [[ -z "$2" ]]; then
+            zyphelp
+        fi
         ;;
     *)
-        # output help if no input
-        if [ -z "$1" ]; then
-            zypper help
-            zyphelp
-            exit 0
-        fi
         # try to run zypper without sudo first
         zypper "$@" 2> ~/.cache/zyp/zyperrors
         ZYPPER_EXIT=$?

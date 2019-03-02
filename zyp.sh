@@ -276,10 +276,13 @@ installobs() {
         echo "$(tput setaf $COLOR_NEGATIVE)Package '$PACKAGE' not found.$(tput sgr0)"
         exit 0
     fi
-    if rpm -qa | grep -qm1 "^$PACKAGE"; then
-        echo "$(tput setaf $COLOR_INFO)'$PACKAGE' is already installed.$(tput sgr0)"
-        echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"
-        exit 0
+    # check if package already installed and prompt to continue
+    if rpm -qi "$PACKAGE" > /dev/null 2>&1; then
+        read -p "$(tput bold)'$PACKAGE' is already installed.  Continue? [y/n] (y):$(tput sgr0)" INSTALL_ANSWER
+        case "$INSTALL_ANSWER" in
+            N*|n*) echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"; exit 0;;
+            *) echo;;
+        esac
     fi
     PS3="$(echo -e "\nSelection: ")"
     echo -e "Select a package to install or enter 'q' to exit: \n"
@@ -502,7 +505,7 @@ case "$1" in
             MATCH_TEXT="TRUE"
             unset SUPPLEMENTS SUGGESTS REQUIRES RECOMMENDS PROVIDES OBSOLETES CONFLICTS
             # detect argument input
-            while [ $# -gt 0 ]; do
+            while [[ $# -gt 0 ]]; do
                 case "$1" in
                     --supplements) shift; SUPPLEMENTS="TRUE";;
                     --suggests) shift; SUGGESTS="TRUE";;

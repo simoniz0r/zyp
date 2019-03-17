@@ -10,10 +10,10 @@ if [[ $EUID -eq 0 ]]; then
     echo "Do not run 'zyp' as root!"
     exit 1
 fi
-# # check if zyp cache dir exists
-# if [[ ! -d "$HOME/.cache/zyp" ]]; then
-#     mkdir -p "$HOME"/.cache/zyp
-# fi
+# check if zyp cache dir exists
+if [[ ! -d "$HOME/.cache/zyp" ]]; then
+    mkdir -p "$HOME"/.cache/zyp
+fi
 # # check if zyp config dir exists
 # if [[ ! -d "$HOME/.config/zyp" ]]; then
 #     # create config dir, config file, and then exit

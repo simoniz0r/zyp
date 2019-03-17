@@ -48,11 +48,12 @@ if [[ $OPENSUSE_VERSION -ge 1550 ]]; then
 else
     OPENSUSE_VERSION="openSUSE_Leap_$(echo $OPENSUSE_VERSION | cut -c-2)"
 fi
-# get api username and password from https://raw.githubusercontent.com/openSUSE/software-o-o/master/config/options.yml
+# get api username and password from https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf
 obsauth() {
-    local USERANDPASS="$(curl -sL "https://raw.githubusercontent.com/openSUSE/software-o-o/master/config/options.yml" | grep -A1 -m1 'api_username' | cut -f4 -d' ' | tr '\n' ':')"
-    export OBS_USERNAME="$(echo "$USERANDPASS" | cut -f1 -d':')"
-    export OBS_PASSWORD="$(echo "$USERANDPASS" | cut -f2 -d':')"
+    curl -sL "https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf" -o "$HOME"/.cache/zyp/zyp.conf
+    source "$HOME"/.cache/zyp/zyp.conf
+    export OBS_USERNAME OBS_PASSWORD
+    rm -f "$HOME"/.cache/zyp/zyp.conf
 }
 # get colors from zypper.conf
 colorparse() {

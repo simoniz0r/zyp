@@ -29,7 +29,7 @@ colorparse() {
     esac
 }
 if [[ -f "/etc/zypp/zypper.conf" ]]; then
-    USE_COLORS="$(cat /etc/zypp/zypper.conf | grep 'useColors' | cut -f3 -d' ')"
+    USE_COLORS="$(cat /etc/zypp/zypper.conf | grep -m1 'useColors' | cut -f2 -d'=' | tr -d '[:blank:]')"
     if [[ "$1" == "--no-color" ]]; then
         shift
         COLOR_INFO="7"
@@ -38,11 +38,11 @@ if [[ -f "/etc/zypp/zypper.conf" ]]; then
         COLOR_POSITIVE="7"
         COLOR_NEGATIVE="7"
     elif [[ "$USE_COLORS" != "never" ]]; then
-        COLOR_INFO="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'highlight =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgError' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'msgWarning' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'positive =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep 'negative =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_INFO="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'highlight =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'msgError' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'msgWarning' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'positive =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'negative =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
     else
         COLOR_INFO="7"
         COLOR_ERROR="7"

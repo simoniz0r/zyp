@@ -107,7 +107,7 @@ infoobs() {
     echo "Name         $(tput setaf $COLOR_INFO):$(tput sgr0) $(echo "$RESULT" | cut -f1 -d'|')"
     echo "Version      $(tput setaf $COLOR_INFO):$(tput sgr0) $(echo "$RESULT" | cut -f2 -d'|')-$(xmlstarlet sel -t -v "/fileinfo/release" "$HOME"/.cache/zyp/fileinfo.xml)"
     echo "Vendor       $(tput setaf $COLOR_INFO):$(tput sgr0) obs://$(echo "$RESULT" | cut -f3 -d'|')"
-    echo "Project URL  $(tput setaf $COLOR_INFO):$(tput sgr0) https://build.opensuse.org/$(echo "$RESULT" | cut -f3 -d'|')"
+    echo "Project URL  $(tput setaf $COLOR_INFO):$(tput sgr0) https://build.opensuse.org/project/show/$(echo "$RESULT" | cut -f3 -d'|')"
     echo "Package Size $(tput setaf $COLOR_INFO):$(tput sgr0) $(awk "BEGIN {print $(xmlstarlet sel -t -v "/fileinfo/size" "$HOME"/.cache/zyp/fileinfo.xml)/1024/1024}" | cut -c-5) MiB"
     echo "Installed    $(tput setaf $COLOR_INFO):$(tput sgr0) No"
     echo "Status       $(tput setaf $COLOR_INFO):$(tput sgr0) not installed"

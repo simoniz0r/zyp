@@ -14,33 +14,6 @@ fi
 if [[ ! -d "$HOME/.cache/zyp" ]]; then
     mkdir -p "$HOME"/.cache/zyp
 fi
-# # check if zyp config dir exists
-# if [[ ! -d "$HOME/.config/zyp" ]]; then
-#     # create config dir, config file, and then exit
-#     mkdir -p "$HOME"/.config/zyp
-#     echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp/zyp.conf
-#     echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
-#     echo "If you do not have a username and password, sign up for one here:"
-#     echo "https://build.opensuse.org/session/new"
-#     exit 1
-# fi
-# # make sure config file exists
-# if [[ ! -f "$HOME/.config/zyp/zyp.conf" ]]; then
-#     echo -e "# zyp config file\nOBS_USERNAME=\"\"\nOBS_PASSWORD=\"\"" > "$HOME"/.config/zyp
-#     echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
-#     echo "If you do not have a username and password, sign up for one here:"
-#     echo "https://build.opensuse.org/session/new"
-#     exit 1
-# fi
-# # source config file and check variables
-# source "$HOME"/.config/zyp/zyp.conf
-# if [[ -z "$OBS_USERNAME" ]] || [[ -z "$OBS_PASSWORD" ]]; then
-#     echo "Missing openSUSE Build Service username and/or password in '$HOME/.config/zyp/zyp.conf'."
-#     echo "Please edit '$HOME/.config/zyp/zyp.conf' and insert your openSUSE Build Service username and password."
-#     echo "If you do not have a username and password, sign up for one here:"
-#     echo "https://build.opensuse.org/session/new"
-#     exit 1
-# fi
 # detect which version of openSUSE we're running
 OPENSUSE_VERSION=$(rpm --eval "%{?suse_version}")
 if [[ $OPENSUSE_VERSION -ge 1550 ]]; then
@@ -402,7 +375,7 @@ case "$1" in
                 shift 2
                 cnf "$@" 2>&1 | sed 's%sudo zypper install%zyp install%'
                 ;;
-            -w|--match-words)
+            -x|--match-exact)
                 shift
                 echo -e "$(tput setaf $COLOR_POSITIVE)Local Repositories Search Results:$(tput sgr0)\n"
                 zyppersearch "$@"
@@ -418,7 +391,7 @@ case "$1" in
                 shift 2
                 case "$1" in
                     # if $3 = --match-words, set MATCH_TEXT to TRUE
-                    -w|--match-words)
+                    -x|--match-exact)
                         shift
                         MATCH_TEXT="TRUE"
                         echo -e "$(tput setaf $COLOR_POSITIVE)Searching the openSUSE Build Service for '$@'...$(tput sgr0)\n"
@@ -598,3 +571,4 @@ case "$1" in
         esac
         ;;
 esac
+

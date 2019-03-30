@@ -36,9 +36,6 @@ zyppersearch() {
         for result in $(cat "$HOME"/.cache/zyp/zypsearch.txt); do
             echo "$(tput setaf $COLOR_INFO)"$(echo "$result" | cut -f1 -d'|')"$(tput sgr0) "\($(echo "$result" | cut -f3 -d'|')\)" "\[$(echo "$result" | cut -f2 -d'|')\]""
             echo -e "    "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')"\n"
-            # echo "Status:  "$(echo "$result" | cut -f2 -d'|')""
-            # echo "Type:    "$(echo "$result" | cut -f3 -d'|')""
-            # echo "Summary: "$(echo "$result" | cut -f4 -d'|' | tr '#' ' ')""
         done > "$HOME"/.cache/zyp/zypresults.txt
         cat "$HOME"/.cache/zyp/zypresults.txt
         rm -f "$HOME"/.cache/zyp/zypresults.txt
@@ -73,9 +70,6 @@ searchobs() {
                 META_DESC="$(curl -sL -u "$OBS_USERNAME:$OBS_PASSWORD" "https://api.opensuse.org/published/$(echo "$result" | cut -f3 -d'|')/$(echo "$result" | cut -f4 -d'|')/$(echo "$result" | cut -f5 -d'|' | cut -f1 -d'-')/$(echo "$result" | cut -f1 -d'|')?view=ymp" | head -n -1 | tail -n +2 | xmlstarlet sel -t -v "/group/software/item/description" -n | tr '\n' ' ' | tr -d '*')"
             fi
             echo "$(tput setaf $COLOR_INFO)"$(echo "$result" | cut -f1 -d'|')"$(tput sgr0)/"$(echo "$result" | cut -f3 -d'|')" "$(echo "$result" | cut -f4 -d'|')" "$(echo "$result" | cut -f2 -d'|')""
-            # echo "Version: "$(echo "$result" | cut -f2 -d'|')""
-            # echo "Project: "$(echo "$result" | cut -f3 -d'|')""
-            # echo "Repo:    "$(echo "$result" | cut -f4 -d'|')""
             if [[ ! -z "$META_DESC" ]]; then
                 if [[ $(echo "$META_DESC" | wc -m) -lt 101 ]]; then
                     echo "    $META_DESC"

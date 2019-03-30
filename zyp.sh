@@ -14,20 +14,6 @@ fi
 if [[ ! -d "$HOME/.cache/zyp" ]]; then
     mkdir -p "$HOME"/.cache/zyp
 fi
-# detect which version of openSUSE we're running
-OPENSUSE_VERSION=$(rpm --eval "%{?suse_version}")
-if [[ $OPENSUSE_VERSION -ge 1550 ]]; then
-    OPENSUSE_VERSION="openSUSE_Tumbleweed\|openSUSE_Factory"
-else
-    OPENSUSE_VERSION="openSUSE_Leap_$(echo $OPENSUSE_VERSION | cut -c-2)"
-fi
-# get api username and password from https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf
-obsauth() {
-    curl -sL "https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf" -o "$HOME"/.cache/zyp/zyp.conf
-    source "$HOME"/.cache/zyp/zyp.conf
-    export OBS_USERNAME OBS_PASSWORD
-    rm -f "$HOME"/.cache/zyp/zyp.conf
-}
 # get colors from zypper.conf
 colorparse() {
     case "$1" in
@@ -71,7 +57,24 @@ else
     COLOR_POSITIVE="4"
     COLOR_NEGATIVE="1"
 fi
-
+# detect which version of openSUSE we're running
+PRODUCT_SUMMARY="$(xmlstarlet sel -t -v '/product/summary' /etc/products.d/baseproduct | tr ' ' '_')"
+if [[ -z "$PRODUCT_SUMMARY" ]]; then
+    echo "$(tput setaf $COLOR_NEGATIVE)Error getting openSUSE summary from '/etc/products.d/baseproduct'; exiting...$(tput sgr0)"
+    exit 0
+fi
+if [[ "$PRODUCT_SUMMARY" == "openSUSE_Tumbleweed" ]]; then
+    OPENSUSE_VERSION="$PRODUCT_SUMMARY\|openSUSE_Factory"
+else
+    OPENSUSE_VERSION="$PRODUCT_SUMMARY"
+fi
+# get api username and password from https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf
+obsauth() {
+    curl -sL "https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf" -o "$HOME"/.cache/zyp/zyp.conf
+    source "$HOME"/.cache/zyp/zyp.conf
+    export OBS_USERNAME OBS_PASSWORD
+    rm -f "$HOME"/.cache/zyp/zyp.conf
+}
 # function to output zypper's search results in a cleaner manner
 zyppersearch() {
     zypper --no-refresh -x se "$@" | xmlstarlet sel -t -m "/stream/search-result/solvable-list/solvable" -v "concat(@name,'|',@status,'|',@kind,'|',@summary)" -n | tr ' ' '#' > "$HOME"/.cache/zyp/zypsearch.txt

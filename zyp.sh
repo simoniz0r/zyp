@@ -5,16 +5,7 @@
 # Description: A wrapper for 'zypper' that allows for easily
 # installing packages from OBS repos and adds other functionality.
 
-# exit if ran as root
-if [[ $EUID -eq 0 ]]; then
-    echo "Do not run 'zyp' as root!"
-    exit 1
-fi
-# check if zyp cache dir exists
-if [[ ! -d "$HOME/.cache/zyp" ]]; then
-    mkdir -p "$HOME"/.cache/zyp
-fi
-# get colors from zypper.conf
+# parse colors from zypper.conf
 colorparse() {
     case "$1" in
         red) echo "1";;
@@ -28,46 +19,6 @@ colorparse() {
         *) echo "7";;
     esac
 }
-if [[ -f "/etc/zypp/zypper.conf" ]]; then
-    USE_COLORS="$(cat /etc/zypp/zypper.conf | grep -m1 'useColors' | cut -f2 -d'=' | tr -d '[:blank:]')"
-    if [[ "$1" == "--no-color" ]]; then
-        shift
-        COLOR_INFO="7"
-        COLOR_ERROR="7"
-        COLOR_WARNING="7"
-        COLOR_POSITIVE="7"
-        COLOR_NEGATIVE="7"
-    elif [[ "$USE_COLORS" != "never" ]]; then
-        COLOR_INFO="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'highlight =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'msgError' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'msgWarning' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'positive =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'negative =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
-    else
-        COLOR_INFO="7"
-        COLOR_ERROR="7"
-        COLOR_WARNING="7"
-        COLOR_POSITIVE="7"
-        COLOR_NEGATIVE="7"
-    fi
-else
-    COLOR_INFO="2"
-    COLOR_ERROR="1"
-    COLOR_WARNING="3"
-    COLOR_POSITIVE="4"
-    COLOR_NEGATIVE="1"
-fi
-# detect which version of openSUSE we're running
-PRODUCT_SUMMARY="$(xmlstarlet sel -t -v '/product/summary' /etc/products.d/baseproduct | tr ' ' '_')"
-if [[ -z "$PRODUCT_SUMMARY" ]]; then
-    echo "$(tput setaf $COLOR_NEGATIVE)Error getting openSUSE summary from '/etc/products.d/baseproduct'; exiting...$(tput sgr0)"
-    exit 0
-fi
-if [[ "$PRODUCT_SUMMARY" == "openSUSE_Tumbleweed" ]]; then
-    OPENSUSE_VERSION="$PRODUCT_SUMMARY\|openSUSE_Factory"
-else
-    OPENSUSE_VERSION="$PRODUCT_SUMMARY"
-fi
 # get api username and password from https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf
 obsauth() {
     curl -sL "https://raw.githubusercontent.com/simoniz0r/zyp/master/zyp.conf" -o "$HOME"/.cache/zyp/zyp.conf
@@ -367,6 +318,56 @@ printf '%s\n' "
 "
 }
 
+# exit if ran as root
+if [[ $EUID -eq 0 ]]; then
+    echo "Do not run 'zyp' as root!"
+    exit 1
+fi
+# check if zyp cache dir exists
+if [[ ! -d "$HOME/.cache/zyp" ]]; then
+    mkdir -p "$HOME"/.cache/zyp
+fi
+# get colors from /etc/zypp/zypper.conf
+if [[ -f "/etc/zypp/zypper.conf" ]]; then
+    USE_COLORS="$(cat /etc/zypp/zypper.conf | grep -m1 'useColors' | cut -f2 -d'=' | tr -d '[:blank:]')"
+    if [[ "$1" == "--no-color" ]]; then
+        shift
+        COLOR_INFO="7"
+        COLOR_ERROR="7"
+        COLOR_WARNING="7"
+        COLOR_POSITIVE="7"
+        COLOR_NEGATIVE="7"
+    elif [[ "$USE_COLORS" != "never" ]]; then
+        COLOR_INFO="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'highlight =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_ERROR="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'msgError' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_WARNING="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'msgWarning' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_POSITIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'positive =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+        COLOR_NEGATIVE="$(colorparse $(cat /etc/zypp/zypper.conf | grep -m1 'negative =' | cut -f2 -d'=' | tr -d '[:blank:]'))"
+    else
+        COLOR_INFO="7"
+        COLOR_ERROR="7"
+        COLOR_WARNING="7"
+        COLOR_POSITIVE="7"
+        COLOR_NEGATIVE="7"
+    fi
+else
+    COLOR_INFO="2"
+    COLOR_ERROR="1"
+    COLOR_WARNING="3"
+    COLOR_POSITIVE="4"
+    COLOR_NEGATIVE="1"
+fi
+# detect which version of openSUSE we're running
+PRODUCT_SUMMARY="$(xmlstarlet sel -t -v '/product/summary' /etc/products.d/baseproduct | tr ' ' '_')"
+if [[ -z "$PRODUCT_SUMMARY" ]]; then
+    echo "$(tput setaf $COLOR_NEGATIVE)Error getting openSUSE summary from '/etc/products.d/baseproduct'; exiting...$(tput sgr0)"
+    exit 0
+fi
+if [[ "$PRODUCT_SUMMARY" == "openSUSE_Tumbleweed" ]]; then
+    OPENSUSE_VERSION="$PRODUCT_SUMMARY\|openSUSE_Factory"
+else
+    OPENSUSE_VERSION="$PRODUCT_SUMMARY"
+fi
 # case to detect arguments
 # run zypper with --no-refresh whenever possible to speed things up
 case "$1" in

@@ -243,7 +243,7 @@ installobs() {
         N|n|No|no) echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"; exit 0;;
     esac
     REPO_URL="http://download.opensuse.org/repositories/$(echo "$PKG_PROJECT" | sed 's%:%:\/%g')/$(echo "$PKG_REPO" | sed 's%:%:\/%g')/"
-    FULL_REPO_URL="https://download.opensuse.org/repositories/$PKG_PROJECT/$PKG_REPO/$PKG_PROJECT.repo"
+    OBS_REPO_URL="obs://$PKG_PROJECT"
     REPO_NAME="$(echo $PKG_PROJECT | tr ':' '_')"
     # detect if user already has repo added
     if zypper -x lr | xmlstarlet sel -t -v "/stream/repo-list/repo/url" -n | grep -qm1 "$REPO_URL"; then
@@ -253,7 +253,7 @@ installobs() {
     else
         SKIP_REPOREM="FALSE"
         echo "$(tput setaf $COLOR_INFO)Adding '$REPO_NAME' to list of repositories...$(tput sgr0)"
-        sudo zypper ar -f -p 100 -n "$REPO_NAME/$PKG_REPO" "$FULL_REPO_URL"
+        sudo zypper ar -f -p 100 -n "$REPO_NAME/$PKG_REPO" "$OBS_REPO_URL" "$REPO_NAME"
         local ZYPPER_EXIT=$?
         case $ZYPPER_EXIT in
             # if repo added, do nothing
@@ -267,7 +267,7 @@ installobs() {
         esac
     fi
     # refresh to make sure user is prompted to trust repo
-    sudo zypper ref
+    sudo zypper ref "$REPO_NAME"
     echo "$(tput setaf $COLOR_INFO)Installing '$PKG_NAME' from repo '$REPO_NAME'..."
     # install package from repo
     sudo zypper --no-refresh in --from "$REPO_NAME" "$PKG_NAME"

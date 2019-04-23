@@ -243,7 +243,7 @@ installobs() {
         N|n|No|no) echo "$(tput setaf $COLOR_INFO)Nothing to do.$(tput sgr0)"; exit 0;;
     esac
     REPO_URL="http://download.opensuse.org/repositories/$(echo "$PKG_PROJECT" | sed 's%:%:\/%g')/$(echo "$PKG_REPO" | sed 's%:%:\/%g')/"
-    OBS_REPO_URL="obs://$PKG_PROJECT"
+    OBS_REPO_URL="obs://$PKG_PROJECT/$PKG_REPO"
     REPO_NAME="$(echo $PKG_PROJECT | tr ':' '_')"
     # detect if user already has repo added
     if zypper -x lr | xmlstarlet sel -t -v "/stream/repo-list/repo/url" -n | grep -qm1 "$REPO_URL"; then
@@ -357,7 +357,7 @@ fi
 PRODUCT_SUMMARY="$(xmlstarlet sel -t -v '/product/summary' /etc/products.d/baseproduct | tr ' ' '_')"
 if [[ -z "$PRODUCT_SUMMARY" ]]; then
     echo "$(tput setaf $COLOR_NEGATIVE)Error getting openSUSE summary from '/etc/products.d/baseproduct'; exiting...$(tput sgr0)"
-    exit 0
+    exit 1
 fi
 if [[ "$PRODUCT_SUMMARY" == "openSUSE_Tumbleweed" ]]; then
     OPENSUSE_VERSION="$PRODUCT_SUMMARY\|openSUSE_Factory"
